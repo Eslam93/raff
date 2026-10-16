@@ -1,20 +1,41 @@
 ---
-title: Designed, not built - the ideas left out of this submission, and how each one would be built
+title: Designed, not built - Raff's roadmap, the ideas left out of v0.1.0, and how each one would be built
 status: draft
-as_of: 2026-09-20
-last_verified: 2026-09-20
+as_of: 2026-10-16
+last_verified: 2026-10-16
 verification_method: Designed on 2026-09-20 against the code as it stood at the end of step 7 and read on 2026-09-19, by four parallel design passes, one review pass and one audit pass that checked the claims about the current system against the code in repo/. Nothing in this page has been built or run
 scope: What was deliberately left out: exploratory questions answered by model-written SQL (A-X06), the features listed as later in the product spec, further uses of AI inside this product, and what production would need. Each with its design, its risks and an effort estimate
 confidence: High on what exists today, read from the code. Medium on the designs, which are reasoned and unbuilt. Low to medium on the effort estimates, which come from how long comparable steps took in this build
 known_gaps: No idea here was prototyped, so no design is validated by running code. Costs and latencies for the AI ideas are not measured. External services named here were not evaluated beyond the ISBN lookup already in use
+supersedes: the 2026-09-20 framing of this page as the record of what one submission left out; on 2026-10-16 it became Raff's roadmap (D-26)
 reverify_when: One of these ideas is built, or a decision in decisions.md changes what the product may do
 ---
 
 # Designed, not built
 
-This project was built in one day against a take-home brief. Plenty was left out on purpose. This
-page is the record of that thinking: for each idea, what it would do, how it would fit the system
-that exists, what makes it safe or correct, what it would cost, and why it is not here.
+Raff's first complete version, `v0.1.0`, was built in one day with a deliberately small scope.
+Plenty was left out on purpose. This page is the record of that thinking and, since 2026-10-16,
+Raff's roadmap (D-26): for each idea, what it would do, how it would fit the system that exists,
+what makes it safe or correct, what it would cost, and why it is not built yet.
+
+## The roadmap
+
+Decided with the owner on 2026-10-16, for small community libraries. Each item gets its own brief
+before it is built.
+
+| Order | What | Design |
+|---|---|---|
+| 1 | Holds and renewals | L01 and L02 below |
+| 2 | Scan at the desk: a camera reads an ISBN or a copy's label, and staff print a QR label per copy | outline below; the full design comes with its brief |
+| 3 | Import books and members from a spreadsheet | L07 below |
+| then | An Arabic interface | not designed yet |
+
+**Scan at the desk, the outline.** Copy codes (`CP-0001`) already identify every copy, and the
+circulation desk already works by copy code, so a label only has to carry that code. A print page
+lays out one QR code per copy for a book or a shelf, and the circulation desk and the add-book form
+gain a "Scan" button that reads a QR code or an ISBN barcode through the device camera and fills
+the field it belongs to. Reading barcodes in every browser needs a small new frontend library,
+which is a stop for the owner. Status: PLANNED, nothing designed beyond this paragraph.
 
 Nothing on this page is built. Everything about the current system was read from the code as it
 stood at the end of step 7, on 2026-09-19, and is marked where it matters. The product rules that constrain every idea are in
@@ -69,7 +90,7 @@ Deterministic tests decide correctness and run in the full verification, while a
 
 About 10 to 13.5 hours from agreement to commit, four to five times the staff face with confirmed Borrow and Return, mostly because it is a security control whose correctness rests on many tests: the gate and its tests are 4 to 5.5 hours of that, and the evaluation 2 to 2.5. Unusual cases in the resolver, pglast on Windows and a hosting plan that allows no second role could each add an hour or two.
 
-In this submission the risk is higher than the value. The typed catalogue already answers every analyst story in the spec, each walked in a browser against the demo data, and nothing yet shows it is missing anything, while a demo has no real staff to ask. This would be the only part of the Copilot whose answers cannot be tested exactly, and its costs reach beyond its own code: a new dependency, a second database role on a hosting plan not yet chosen, and a change to a product rule, which makes it Tier 3 and starts it with a decision entry. It would also end the simplest safety statement the Copilot can make today, that the model never writes SQL (D-08).
+In v0.1.0 the risk is higher than the value. The typed catalogue already answers every analyst story in the spec, each walked in a browser against the demo data, and nothing yet shows it is missing anything, while a demo has no real staff to ask. This would be the only part of the Copilot whose answers cannot be tested exactly, and its costs reach beyond its own code: a new dependency, a second database role on a hosting plan not yet chosen, and a change to a product rule, which makes it Tier 3 and starts it with a decision entry. It would also end the simplest safety statement the Copilot can make today, that the model never writes SQL (D-08).
 
 ## The features left for later
 
@@ -96,7 +117,7 @@ A ledger, not a payment system. Account entries hold a kind, an amount as a whol
 
 ### L05, lost and damaged copies
 
-Copies gain a withdrawal reason (lost, damaged, withdrawn) set with the archive field, which already means out of circulation everywhere, and loans gain a closed-as value. A lost loan gets a return time, so it frees the one-active-loan index, and the metrics that read that field gain a closed-as filter, so a lost loan is never counted as a return. 3 to 4 hours. Left out because archiving the whole book already covers the assignment's removal requirement.
+Copies gain a withdrawal reason (lost, damaged, withdrawn) set with the archive field, which already means out of circulation everywhere, and loans gain a closed-as value. A lost loan gets a return time, so it frees the one-active-loan index, and the metrics that read that field gain a closed-as filter, so a lost loan is never counted as a return. 3 to 4 hours. Left out because archiving the whole book already covers removing a book.
 
 ### L14, configurable lending policies
 
@@ -108,15 +129,15 @@ Seven moving parts, of which only the recipient queries exist: the hourly job, a
 
 ### L06, several branches
 
-A `branches` table, a home and a current branch on copies, a branch and a returning branch on loans, and a `transfers` table where a copy in transit is available nowhere; the staff working branch comes from the session, never from the model. 10 to 14 hours, the largest item here, though the migration creates one branch and assigns everything to it, so nothing changes until a second branch exists. Left out by D-01, section 6, and an assignment describing one library.
+A `branches` table, a home and a current branch on copies, a branch and a returning branch on loans, and a `transfers` table where a copy in transit is available nowhere; the staff working branch comes from the session, never from the model. 10 to 14 hours, the largest item here, though the migration creates one branch and assigns everything to it, so nothing changes until a second branch exists. Left out by D-01 and section 6 of the spec: Raff serves one library.
 
 ### L07, bulk imports
 
-Staff upload a CSV of books or members, see every row checked, then confirm. Each row goes through the existing create functions, so validation, the unique indexes and the activity events are the same, and the stored import is confirmable once by its uploader on the proposal pattern, under limits on file size and row count. 3 to 5 hours. Left out because the demo library comes from the seed, so an import shows a reviewer nothing.
+Staff upload a CSV of books or members, see every row checked, then confirm. Each row goes through the existing create functions, so validation, the unique indexes and the activity events are the same, and the stored import is confirmable once by its uploader on the proposal pattern, under limits on file size and row count. 3 to 5 hours. Left out of v0.1.0 because the demo library comes from the seed; a real library needs it on its first day, so it is third on the roadmap.
 
 ### L13, shelves and locations
 
-Books gain a call number and copies gain a location, both shown in the book form, the copies table and the Copilot book lookup; free text first, because a locations table earns its place only when staff need to filter or count by location. 1.5 to 2 hours for the shelf mark, 3 to 4 hours more for the inventory check that lists the copies a shelf scan expected but did not see. Left out because nothing in the assignment asks where a copy stands.
+Books gain a call number and copies gain a location, both shown in the book form, the copies table and the Copilot book lookup; free text first, because a locations table earns its place only when staff need to filter or count by location. 1.5 to 2 hours for the shelf mark, 3 to 4 hours more for the inventory check that lists the copies a shelf scan expected but did not see. Left out because v0.1.0 did not need to know where a copy stands.
 
 ### L15, more staff roles
 
@@ -195,7 +216,7 @@ Open Library allows 100 cover requests by ISBN per 5 minutes per address before 
 
 ### 8. What would accessibility and right-to-left languages take?
 
-Built along the way: a skip link, live regions, every chart paired with a captioned table, and dates and numbers through `Intl`. Not done: no automated check and no screen-reader walk has been run, there is no message catalog, and several dozen left and right utility classes across the web app do not flip. The number check compares runs of digits as text, and the pattern also matches Arabic-Indic digits, so a reply writing 37 in Arabic digits would be rejected and the turn would fall back to plain results; checked with a local Python interpreter, not through the app. Design: axe checks in the test suite and screen-reader walks first, then a message catalog, logical Tailwind classes and the number check converting digit runs to ASCII. About 5 to 6 hours for the accessibility audit, and 12 to 16 hours for the catalog and Arabic. Left out because the assignment and the spec are English-only.
+Built along the way: a skip link, live regions, every chart paired with a captioned table, and dates and numbers through `Intl`. Not done: no automated check and no screen-reader walk has been run, there is no message catalog, and several dozen left and right utility classes across the web app do not flip. The number check compares runs of digits as text, and the pattern also matches Arabic-Indic digits, so a reply writing 37 in Arabic digits would be rejected and the turn would fall back to plain results; checked with a local Python interpreter, not through the app. Design: axe checks in the test suite and screen-reader walks first, then a message catalog, logical Tailwind classes and the number check converting digit runs to ASCII. About 5 to 6 hours for the accessibility audit, and 12 to 16 hours for the catalog and Arabic. Left out of v0.1.0, whose spec is English-only; an Arabic interface is on the roadmap after imports.
 
 ### What to do first, and why
 

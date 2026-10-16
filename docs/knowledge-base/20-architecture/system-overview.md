@@ -124,8 +124,8 @@ their books, and 17 of the 19 titles without one gained one.
 - No passwords exist in the system: a named user signs in with Google, and the demo buttons open a
   session on one of two shared accounts that hold no personal data (D-05). Those buttons are a
   setting, off by default in production, and the session they create follows the same rules as any
-  other. The demonstration deployment turns them on deliberately, so anyone who opens it can act
-  as staff and change the generated library; `operations.md` says how it is restored.
+  other. The first demonstration deployment turned them on deliberately, so anyone who opened it
+  could act as staff and change the generated library (`operations.md`, history since 2026-10-16).
 - Origin check on state-changing requests; strict Content-Security-Policy and security headers.
   Images may come only from the app and Open Library's cover hosts; on the product's own pages no
   script, style or data request goes to another host, and the ISBN lookup runs on the server. The
@@ -166,4 +166,5 @@ integration tests use their own `library_test` database and fail instead of skip
 production. CI (`.github/workflows/ci.yml`) runs both halves of the gate, backend and frontend checks and the
 harness checks, plus a Docker build. The harness checks were run on Linux in a container on
 2026-09-20 and passed 20 of 20, the two Windows-only ones skipping themselves. CI ran for the
-first time on 2026-09-20, when the repository was published, and passes on the submitted commit.
+first time on 2026-09-20, when the repository was published, and passed on that commit, tagged
+`v0.1.0` on 2026-10-16.

@@ -1,7 +1,7 @@
 # Standing orders
 
 How to work in this repository. Project facts (layout, branches, commands, the data posture) live
-in the project rule beside this file, `library.md`.
+in the project rule beside this file, `raff.md`.
 
 ## The three habits
 

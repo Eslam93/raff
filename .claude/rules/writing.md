@@ -3,10 +3,11 @@
 Everything you write is read by a mix of people: developers, analysts, managers, and non-technical
 stakeholders. Write for all of them at once.
 
-The first reader of everything here is a senior engineer or product lead reviewing this project in
-limited time. They read the README first and decide within minutes whether to read further. Many
-readers use English as a working second language: keep the project's own terms, simplify the
-connective English around them.
+The first readers are the people who run a small community library and the developers who might
+use or improve Raff. Both read the README first and decide within minutes whether it fits them.
+Many readers use English as a working second language, and many of Raff's libraries are in
+Arabic-speaking communities: keep the project's own terms, simplify the connective English around
+them.
 
 ## Voice
 

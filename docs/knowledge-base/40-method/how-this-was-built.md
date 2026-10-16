@@ -1,18 +1,19 @@
 ---
-title: How this project was built - who decided what, the loop every step followed, and the guardrails
+title: How Raff is built - who decides what, the loop every step followed, and the guardrails
 status: verified
-as_of: 2026-09-20
-last_verified: 2026-09-20
+as_of: 2026-10-16
+last_verified: 2026-10-16
 verification_method: Described from the harness files in .claude/, the step briefs, and the record of steps 0 to 7 in ../30-delivery/build-log.md
 scope: The working method for this repository: roles, the per-step loop, the checks and hooks, and what the method does not cover
 confidence: High for what the method is and what the hooks enforce, read from the harness itself. Medium for how well it would scale to a team, which was never tested
 known_gaps: The method was used by one owner and one AI assistant over one day of building. No independent review was part of the loop (D-15), so defects the checks cannot see rely on the browser walks alone
+supersedes: the 2026-09-20 wording, written for a reviewer of one submission; the method it describes is unchanged
 reverify_when: The harness rules or hooks change, or the loop changes
 ---
 
-# How this project was built
+# How Raff is built
 
-The brief allowed any tools, including AI. The build used an AI coding assistant working inside a
+Raff is built by an AI coding assistant working inside a
 small harness of rules, hooks and checks (`.claude/`). This page says who decided what, the loop
 every step followed, what is enforced mechanically, and where the method stops.
 
@@ -27,7 +28,7 @@ owner also decided:
 | Decision | Where recorded |
 |---|---|
 | The stack and one container serving one origin | D-04 |
-| Google sign-in, plus demo sign-in so a reviewer can try both roles | D-05 |
+| Google sign-in, plus demo sign-in so anyone can try both roles | D-05 |
 | Staff get both the staff and the analyst faces in one panel | D-06 |
 | Models through OpenRouter; the default model choice was delegated | D-11, D-19 |
 | Demo data from reader personas only, with no answer key or evaluation data | D-10 |
@@ -36,7 +37,7 @@ owner also decided:
 | No separate code-review stage | D-15 |
 | The analyst's metric catalogue, and a charts library loaded on demand | D-20 |
 | Step 8 designed rather than built | D-21 |
-| One commit for the submission | D-22 |
+| One commit for the first publication, then normal history from `v0.1.0` | D-22, D-26 |
 | Where the demo is deployed, and on which name | D-23 |
 | Google sign-in open to any account, with the notices that requires | D-24 |
 | The harness and this knowledge base ship with the code | D-16 |

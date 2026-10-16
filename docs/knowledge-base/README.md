@@ -9,10 +9,10 @@ decided and why, and what is still open. A suggested reading order:
 4. `decisions.md`: every decision, with the options and the reasons.
 5. `40-method/how-this-was-built.md`: who decided what, and the guardrails.
 6. `99-pending.md`: what is still open, including known shortcuts.
-7. `50-designs/designed-not-built.md`: the ideas left out on purpose, each designed against this
-   system, with its risks and what it would cost.
-8. `20-architecture/operations.md`: how the live demonstration runs, what a visitor can change,
-   and the order to take it down.
+7. `50-designs/designed-not-built.md`: Raff's roadmap, and the ideas left out on purpose, each
+   designed against this system, with its risks and what it would cost.
+8. `20-architecture/operations.md`: history: how the first live demonstration ran, until it was
+   torn down on 2026-10-16.
 
 **Two warnings, before anything else.**
 
