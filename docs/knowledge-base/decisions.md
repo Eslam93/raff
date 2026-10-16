@@ -6,7 +6,7 @@ last_verified: 2026-10-16
 verification_method: Recorded as each decision was agreed with the owner, on 2026-09-19 and 2026-09-20. D-01 to D-20 are exercised by built, tested code (step 5 exercised D-07's confirmed writes, step 6 D-08 and D-20, step 7 D-09 and D-13); D-21 to D-24 were carried out on 2026-09-20. D-25 and D-26 were carried out on 2026-10-16: the AWS teardown was checked resource by resource, and the rename and tag were checked on GitHub
 scope: Decisions about this project: product boundary, architecture, AI behaviour, delivery and ways of working
 confidence: High that these are the decisions in force, because each was agreed explicitly. Medium on the reasoning where it predicts cost for steps not yet built
-known_gaps: Where Raff is hosted next is open: D-25 tore the demo down and the owner's machine is not chosen yet
+known_gaps: None open: hosting was decided on 2026-10-16 (D-29)
 reverify_when: Whenever a decision is made or superseded, and at each delivery step's hand-back
 ---
 
@@ -14,6 +14,21 @@ reverify_when: Whenever a decision is made or superseded, and at each delivery s
 
 One entry per real fork, newest first. Fields: decision · options considered · why · decided by ·
 reversible or not · revisit when · supersedes.
+
+### D-29 · The public demo runs on the owner's eslamhamed.com server
+
+- **Decision:** the demo runs at `raff.eslamhamed.com` on the owner's existing server, beside their
+  other sites: Raff's own Docker Compose stack with a memory cap per container, nginx and a Let's
+  Encrypt certificate in front, demo sign-in on, nightly database dumps kept for seven days
+  (`20-architecture/hosting.md`). The Google consent screen stays published, so any Google account
+  can sign in and becomes a member.
+- **Options:** the owner's server; a separate small server; a home machine behind a tunnel.
+- **Why:** the owner wants a demo anyone considering hiring them can open, at no extra cost. The
+  server had about 2 GB of memory free on 2026-10-16 and Raff measured about 130 MB at rest, so the
+  caps keep it from crowding the other sites.
+- **By:** owner, 2026-10-16 · **Reversible:** yes; the teardown is in the hosting page
+- **Revisit when:** the box runs short of memory, or Raff holds real members' data.
+- **Supersedes:** the open hosting question left by D-25
 
 ### D-28 · Members make their first changes: their own holds and renewals
 

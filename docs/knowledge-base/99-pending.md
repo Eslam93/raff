@@ -7,9 +7,8 @@ Everything found and not acted on. One line each, same turn, grouped by who can 
 - `P2` The live demo was torn down on 2026-10-16 (D-25), but the two `library` records for
   eslamhamed.com still sit at the registrar, pointing at a CloudFront address that no longer
   exists. Remove them in the registrar's DNS settings.
-- `?` The Google consent screen is published, so any Google account can sign in to a deployment
-  that uses that client, and becomes a member. Decide before Raff is hosted again whether that
-  stays, or whether the client goes back to testing with a list of allowed accounts.
+- `P2` The Raff demo has no uptime monitoring and no alert when its nightly backup fails, and no
+  restore has been rehearsed (`20-architecture/hosting.md`).
 
 ## 2 · Needs a decision
 

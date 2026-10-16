@@ -30,6 +30,7 @@ reverify_when: Every time a page is added, superseded, or removed
 | `../30-delivery/build-log.md` | each step: what was agreed, built and verified, and what went wrong and how it was fixed |
 | `../40-method/how-this-was-built.md` | who decided what, the loop every step followed, the guardrails, where the method stops |
 | `../decisions.md` | every decision in force, with the options, the reasons and when to revisit |
+| `../20-architecture/hosting.md` | where the public demo runs since 2026-10-16: the box, its limits, updates and backups (D-29) |
 | `../20-architecture/operations.md` | history: how the first live demonstration ran, until it was torn down on 2026-10-16 (D-25) |
 | `../50-designs/designed-not-built.md` | Raff's roadmap, and the ideas left out on purpose, each designed against this system, with its risks and what it would cost |
 | `../99-pending.md` | everything noticed and not yet acted on |
