@@ -1,16 +1,20 @@
 ---
-title: Running the live demo - what it is made of, how it is managed, and how to take it down
-status: verified
+title: Running the live demo - what it was made of, how it was managed, and how it was taken down
+status: superseded
 as_of: 2026-09-20
-last_verified: 2026-09-20
+last_verified: 2026-10-16
 verification_method: Written on 2026-09-20 from the deployment as it was built that day, and checked against the running system: the health check, the sign-in page, demo and Google sign-in, and three Copilot turns through the public address
 scope: The demonstration deployment of this application: its pieces, how it is reached, how it is managed and changed, what it costs, and the order to remove it. Identifiers of the individual resources are kept with the owner, not here
 confidence: High for the shape and the commands, which were run. Medium for the cost, which is an estimate from published prices rather than a bill
 known_gaps: One instance with its database on the same disk, so a stop loses the data; no backups; no application liveness probe; nothing measured under real traffic
-reverify_when: The deployment changes, moves, or is taken down
+reverify_when: Raff is hosted again; that deployment gets its own page, and this one stays as history
 ---
 
 # Running the live demo
+
+**Historical since 2026-10-16.** This deployment was torn down at the owner's request and every
+resource was checked gone (D-25). The page stays as the record of how the first deployment was built
+and run; where Raff is hosted next is open.
 
 The demonstration runs on one small virtual machine in a single region, with the same Docker
 Compose stack a laptop runs: PostgreSQL, a one-shot migration, and the application. A content

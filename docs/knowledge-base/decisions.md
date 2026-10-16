@@ -1,12 +1,12 @@
 ---
 title: Every decision in force, what each superseded, and when to revisit it
 status: verified
-as_of: 2026-09-20
-last_verified: 2026-09-20
-verification_method: Recorded as each decision was agreed with the owner, on 2026-09-19 and 2026-09-20. D-01 to D-20 are exercised by built, tested code (step 5 exercised D-07's confirmed writes, step 6 D-08 and D-20, step 7 D-09 and D-13); D-21 to D-24 were carried out on 2026-09-20 and are visible in the published repository and the running deployment
+as_of: 2026-10-16
+last_verified: 2026-10-16
+verification_method: Recorded as each decision was agreed with the owner, on 2026-09-19 and 2026-09-20. D-01 to D-20 are exercised by built, tested code (step 5 exercised D-07's confirmed writes, step 6 D-08 and D-20, step 7 D-09 and D-13); D-21 to D-24 were carried out on 2026-09-20. D-25 and D-26 were carried out on 2026-10-16: the AWS teardown was checked resource by resource, and the rename and tag were checked on GitHub
 scope: Decisions about this project: product boundary, architecture, AI behaviour, delivery and ways of working
 confidence: High that these are the decisions in force, because each was agreed explicitly. Medium on the reasoning where it predicts cost for steps not yet built
-known_gaps: None open: the hosting target was decided on 2026-09-20 (D-23)
+known_gaps: Where Raff is hosted next is open: D-25 tore the demo down and the owner's machine is not chosen yet
 reverify_when: Whenever a decision is made or superseded, and at each delivery step's hand-back
 ---
 
@@ -14,6 +14,38 @@ reverify_when: Whenever a decision is made or superseded, and at each delivery s
 
 One entry per real fork, newest first. Fields: decision · options considered · why · decided by ·
 reversible or not · revisit when · supersedes.
+
+### D-26 · The project continues as Raff, a side project for small community libraries
+
+- **Decision:** the library system becomes Raff (رف, "shelf"), the owner's own project, for small
+  community libraries: school, mosque or church, office, coworking, neighbourhood. The repository
+  is renamed `Eslam93/raff`, the first complete version is tagged `v0.1.0` (6e86f70), and history
+  continues as normal commits through pull requests into `main`. The code is published under the
+  MIT licence. The roadmap, in order: holds and renewals, scanning at the desk with printed copy
+  labels, imports from a spreadsheet, then an Arabic interface
+  (`50-designs/designed-not-built.md`).
+- **Options:** for the audience, small community libraries or a personal home library (which would
+  remove the two roles); for the licence, none, MIT, or a copyleft licence.
+- **Why:** the project was built for a one-off review and now stands as the owner's product.
+  Community libraries match the existing staff and member model exactly. MIT is the simplest licence
+  that lets others reuse the code.
+- **By:** owner, 2026-10-16 · **Reversible:** the name and licence yes; the published history no
+- **Revisit when:** a real library uses Raff, which moves the data posture (D-17) towards production.
+- **Supersedes:** D-22 (the single published commit), and the end-task framing of D-14: publishing
+  happened, and the project continues past it
+
+### D-25 · The AWS live demo is torn down; hosting moves to the owner's machine later
+
+- **Decision:** every AWS resource of the live demo was deleted on 2026-10-16: the CloudFront
+  distribution and its certificate, the instance with its disk and the demo database (no backup),
+  the Elastic IP, the security group, the IAM role and profile, and the four encrypted parameters.
+  Each was checked gone. Hosting on the owner's own machine is to be decided after the reshape.
+- **Options:** keep paying for the demo; tear it down.
+- **Why:** the review it served is over, and it cost about eight to ten dollars a month.
+- **By:** owner, 2026-10-16 · **Reversible:** yes, by deploying again; the demo data was generated
+  and can be generated again
+- **Revisit when:** the owner's machine is chosen.
+- **Supersedes:** D-23
 
 ### D-24 · Google sign-in is open to any account, and the deployment publishes its notices
 
@@ -44,6 +76,7 @@ reversible or not · revisit when · supersedes.
 - **By:** owner, 2026-09-20 · **Reversible:** yes; the teardown is one list of commands
 - **Revisit when:** the demo needs to survive a restart, or the review is over and it comes down.
 - **Supersedes:** none
+- **Superseded by:** D-25 on 2026-10-16: the demo was torn down
 
 ### D-22 · The submission is published as a single commit
 
@@ -60,6 +93,7 @@ reversible or not · revisit when · supersedes.
 - **By:** owner, 2026-09-20 · **Reversible:** no, once the local history is gone
 - **Revisit when:** the project continues after the submission, when normal history resumes.
 - **Supersedes:** none
+- **Superseded by:** D-26 on 2026-10-16: normal history resumed after the tag `v0.1.0`
 
 ### D-21 · Step 8 is designed, not built
 
@@ -169,6 +203,7 @@ reversible or not · revisit when · supersedes.
 - **By:** owner, 2026-09-19 · **Reversible:** yes
 - **Revisit when:** the time budget changes.
 - **Supersedes:** none
+- **Superseded in part by:** D-26 on 2026-10-16: value order still holds for each new step; the end tasks are done
 
 ### D-13 · ISBN lookup and cover images join the scope
 
@@ -309,6 +344,7 @@ reversible or not · revisit when · supersedes.
 - **By:** owner, 2026-09-19 · **Reversible:** yes
 - **Revisit when:** the brief's authors say otherwise.
 - **Supersedes:** none
+- **Changed on 2026-10-16 (D-26):** the README no longer maps the brief's wording; Borrow and Return stay
 
 ### D-02 · Two roles: Staff and Member
 

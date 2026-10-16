@@ -77,9 +77,9 @@ export function TermsPage() {
         The source code is public at{" "}
         <a
           className="underline underline-offset-4"
-          href="https://github.com/Eslam93/mini-library-management-system"
+          href="https://github.com/Eslam93/raff"
         >
-          github.com/Eslam93/mini-library-management-system
+          github.com/Eslam93/raff
         </a>
         .
       </p>

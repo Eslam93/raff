@@ -33,7 +33,7 @@ function Brand({ to, className }: { to: string; className?: string }) {
       <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
         <LibraryBig className="size-4" aria-hidden />
       </span>
-      Library
+      Raff
     </Link>
   )
 }
@@ -74,7 +74,7 @@ export function AppShell() {
             </SheetTrigger>
             <SheetContent side="left" className="w-72 gap-2 bg-card p-0">
               <SheetHeader>
-                <SheetTitle>Library</SheetTitle>
+                <SheetTitle>Raff</SheetTitle>
                 <SheetDescription className="sr-only">Go to a section of the app.</SheetDescription>
               </SheetHeader>
               <SidebarNav

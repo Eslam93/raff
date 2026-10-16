@@ -9,7 +9,7 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   useEffect(() => {
-    document.title = `${title} · Library`
+    document.title = `${title} · Raff`
   }, [title])
 
   return (

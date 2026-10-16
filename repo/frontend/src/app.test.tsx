@@ -194,7 +194,7 @@ describe("Session", () => {
 
     renderWithProviders(<App />, { route: "/books/book-1?tab=copies", user: undefined })
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { level: 1, name: "Raff" })).toBeInTheDocument()
     expect(currentLocation()).toBe("/sign-in?next=%2Fbooks%2Fbook-1%3Ftab%3Dcopies")
     expect(await screen.findByRole("link", { name: "Continue with Google" })).toHaveAttribute(
       "href",

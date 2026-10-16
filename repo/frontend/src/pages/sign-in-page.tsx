@@ -51,7 +51,7 @@ export function SignInPage() {
   const sessionEnded = isSessionEndedState(location.state)
 
   useEffect(() => {
-    document.title = "Sign in · Library"
+    document.title = "Sign in · Raff"
   }, [])
 
   if (me.data) return <Navigate to={next ?? homePaths[me.data.role]} replace />
@@ -63,7 +63,7 @@ export function SignInPage() {
           <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <LibraryBig className="size-6" aria-hidden />
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight">Library</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Raff</h1>
           <p className="text-sm text-muted-foreground">
             Find books, see what is on the shelf, and keep track of every loan.
           </p>

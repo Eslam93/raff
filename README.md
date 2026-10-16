@@ -1,42 +1,35 @@
-# Library
+# Raff
 
-[![CI](https://github.com/Eslam93/mini-library-management-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Eslam93/mini-library-management-system/actions/workflows/ci.yml)
+[![CI](https://github.com/Eslam93/raff/actions/workflows/ci.yml/badge.svg)](https://github.com/Eslam93/raff/actions/workflows/ci.yml)
 
-A catalog and circulation system for a single library, used by staff and members: books and their
-physical copies, members, borrowing and returns with due dates, availability, history, and an AI
-Copilot that works on top of the product's real capabilities.
+Raff (رف, "shelf") is a library system for small community libraries: a school library, a mosque or
+church library, an office or coworking bookshelf, a neighbourhood book corner. Staff keep the
+catalog and lend books; members find books and keep track of what they have borrowed. It runs on
+one small machine with Docker, and it has an AI Copilot that works only through the library's own
+actions and never makes up a number.
 
-**Try it: https://library.eslamhamed.com** Press "Sign in as staff" or "Sign in as member" on the
-sign-in page; both demo accounts share the same generated library, and Google sign-in works there
-for any Google account. To run it yourself, see [Run it](#run-it).
+## What it does
 
-## What the brief asked for, and where it is
+- **A catalog of books and their copies.** A book is the title; each physical copy has its own code
+  (such as `CP-0001`). "Look up" fills a new book's details from its ISBN, and covers appear on
+  their own. Search finds part of a title, an author or an ISBN.
+- **Borrow and Return.** A circulation desk that works by copy code, due dates, overdue tracking,
+  and the loan history of every book and member. Availability is worked out from the loans each
+  time, so it is never out of date.
+- **Two roles with their own screens.** Staff manage the catalog, members and circulation, and
+  see a dashboard and an activity log. Members browse the catalog and see their own loans and
+  history.
+- **The Copilot,** a panel on every page:
+  - Members ask it to find books and about their own loans.
+  - Staff use it to look up members, loans, overdue items and copies. It also prepares a Borrow or
+    a Return, and nothing happens until they press Confirm.
+  - Staff ask it how the library is used and get a table, a chart, or a forecast computed from the
+    data.
 
-| The brief | Where to see it | Where it lives |
-|---|---|---|
-| View the catalog | Catalog, with covers, filters and sorting | `repo/frontend/src/pages/catalog-page.tsx`, `repo/backend/app/services/catalog.py` |
-| Add a book | Catalog, "Add book"; "Look up" fills the details from the ISBN | `repo/backend/app/api/routers/books.py`, and `services/isbn_lookup.py` for the lookup |
-| Edit a book | A book's page, "Edit" | same router; the rules are in the service |
-| Delete a book | A book's page, "Delete"; a book with loan history is archived instead | `repo/backend/app/services/catalog.py` |
-| Borrow a copy | A book's page, or the Copilot proposing it for staff | `repo/backend/app/services/circulation.py` |
-| Return a copy | Circulation, by copy code | same service |
-| Search | The catalog's search box: title, author or part of an ISBN | `repo/backend/app/services/catalog.py`, with the matching in `text_search.py` and `isbn.py` |
-| Availability | Badges on every book and copy, derived when read, never stored | `repo/backend/app/services/catalog.py` |
-
-Borrowing the same copy twice at once cannot happen: the database holds one active loan per copy,
-and a test races two real connections for it.
-
-**Beyond the brief:** sign-in with two roles that get different products, an operational dashboard,
-a circulation desk that works by copy code, overdue tracking, member and book loan histories, an
-append-only activity log, and a Copilot panel on every page. Members use it to find books and ask
-about their own loans. Staff use it to look up members, loans, overdue items and copies, and to
-borrow or return a copy: it prepares the change and nothing happens until they press Confirm. Staff
-can also ask how the library is used and get a table, a chart and a forecast computed from the data.
-[More about the Copilot](#the-copilot).
-
-**A note on wording.** The brief says books are "checked in (borrowed)" and "checked out
-(returned)", the reverse of standard library usage. The product says **Borrow** (check out) and
-**Return** (check in), so both actions in the brief are covered under their usual names.
+**Built to stay correct.** The same copy cannot be lent twice at once: the database allows one
+active loan per copy, and a test races two real connections for it. A book with loan history is
+archived, never deleted, so the history stays. Every action is recorded in an append-only activity
+log, marked when it came through the Copilot.
 
 ## Run it
 
@@ -66,18 +59,17 @@ http://localhost:8000/api/docs.
 
 ## Sign in
 
-The sign-in page offers two demo accounts, one per role, so both experiences can be tried without
-an account: **staff** manage the catalog, members and circulation; **members** browse the catalog
-and see their own loans and history.
+The sign-in page offers two demo accounts, one per role, so both can be tried without an account:
+**staff** manage the catalog, members and circulation; **members** browse the catalog and see their
+own loans and history.
 
-**The demo buttons ask for no password, on purpose.** There is no password anywhere in this
-system: the two demo accounts are shared accounts that belong to nobody and hold no personal data,
-and one button press signs you into one of them so a reviewer can see both roles in seconds.
-Real accounts come from Google, which is the only way to become a named user here, so the project
-never stores, hashes, resets or emails a password. The demo buttons are a setting
-(`DEMO_LOGIN_ENABLED`), off by default in production and turned on deliberately for the live demo.
-Everything behind them is the real thing: the same server-side session, the same cookie rules and
-the same permission checks as a Google sign-in.
+**The demo buttons ask for no password, on purpose.** There is no password anywhere in Raff: the
+two demo accounts are shared accounts that belong to nobody and hold no personal data, and one
+button press signs you into one of them. Real accounts come from Google, which is the only way to
+become a named user here, so Raff never stores, hashes, resets or emails a password. The demo
+buttons are a setting (`DEMO_LOGIN_ENABLED`), off by default in production. Everything behind them
+is the real thing: the same server-side session, the same cookie rules and the same permission
+checks as a Google sign-in.
 
 **Google sign-in (optional).** It appears on the sign-in page once a Google OAuth client is
 configured:
@@ -101,9 +93,12 @@ configured:
    `localhost` as in the redirect URI. Addresses in `STAFF_EMAILS` join as staff the first time they
    sign in; everyone else joins as a member.
 
-For a deployment, also set `APP_ENV=production`, a random `SESSION_SECRET` of at least 32
-characters, `PUBLIC_BASE_URL=https://<your domain>`, `DEMO_LOGIN_ENABLED=true` if the demo buttons
-should stay, and register `https://<your domain>/api/auth/google/callback` with Google.
+To run it for real people, also set `APP_ENV=production`, a random `SESSION_SECRET` of at least 32
+characters, `PUBLIC_BASE_URL=https://<your domain>`, `DEMO_LOGIN_ENABLED=true` only if the demo
+buttons should stay, and register `https://<your domain>/api/auth/google/callback` with Google.
+Before a real library's members go in, read the `demo-debt` lines in the
+[open items](docs/knowledge-base/99-pending.md): they are the shortcuts that are fine for sample
+data and not for personal data.
 
 ## The Copilot
 
@@ -115,11 +110,11 @@ OPENROUTER_API_KEY=<key>
 # COPILOT_MODEL=<any OpenRouter model with tool support; default google/gemini-3.8-flash>
 ```
 
-It only uses the product's own capabilities, with the signed-in person's permissions: it never acts
-on another member's data, and declines what the library does not offer, such as reservations. It is
-also held to its figures: before a reply is sent, every run of digits in it must appear in a lookup
-result or in what the person typed, or the reply is retried once and then replaced by the lookup
-results as plain text.
+It only uses Raff's own actions, with the signed-in person's permissions: it never acts on another
+member's data, and declines what Raff does not offer yet, such as holds. It is also held to its
+figures: before a reply is sent, every run of digits in it must appear in a lookup result or in
+what the person typed, or the reply is retried once and then replaced by the lookup results as
+plain text.
 
 For staff it can also prepare a Borrow or a Return ("Borrow The Hobbit for Maya Hassan"). It shows
 the change as a card with Confirm and Cancel. The server stores the proposal for 10 minutes, only
@@ -135,6 +130,20 @@ every total, share and change. Answers show a table, and a chart where one helps
 borrowing for the next three months" gives each month with a likely range measured by testing the
 method on past months; when the history is too short, too thin or too erratic, it says what it has
 and what it would need, and shows the trend instead.
+
+## What comes next
+
+In this order. Holds, renewals and imports are designed in
+[Designed, not built](docs/knowledge-base/50-designs/designed-not-built.md); scanning is outlined
+there and gets its full design when its turn comes.
+
+1. **Holds and renewals.** A member joins a queue for a book whose copies are all out, and staff
+   can extend a loan.
+2. **Scan at the desk.** A phone or laptop camera reads an ISBN or a copy's label, and staff print
+   labels with a QR code for each copy.
+3. **Import from a spreadsheet,** so a library does not type in its books one by one.
+
+After those, an Arabic interface.
 
 ## Develop
 
@@ -167,22 +176,26 @@ Every check in one command, from the repository root: `bash .claude/tools/verify
 | `repo/frontend/` | React web app: Vite, TypeScript, Tailwind CSS, TanStack Query |
 | `repo/Dockerfile` | one image: the API serves the built web app from the same origin |
 | `docs/knowledge-base/` | the product spec, the decision log, open items |
-| `.claude/` | the AI working harness used to build this project ([what is in it](.claude/README.md)) |
+| `.claude/` | the AI working harness Raff is built with ([what is in it](.claude/README.md)) |
 | `.github/workflows/` | CI: backend checks against a real PostgreSQL, frontend checks, image build |
 
-## How it was built
+## How it is built
 
-This project was built with an AI coding assistant working inside a small harness of rules, hooks
-and checks (`.claude/`), with the owner deciding the product and every fork. The
+Raff is built with an AI coding assistant working inside a small harness of rules, hooks and checks
+(`.claude/`), with the owner deciding the product and every fork. The
 [knowledge base](docs/knowledge-base/README.md) tells the story:
 
 - [Build log](docs/knowledge-base/30-delivery/build-log.md): each step, what was agreed, built and
   verified, and what went wrong and how it was fixed.
 - [How this was built](docs/knowledge-base/40-method/how-this-was-built.md): who decided what, the
   loop every step followed, and what is enforced mechanically.
-- [Designed, not built](docs/knowledge-base/50-designs/designed-not-built.md): what was left out
-  on purpose, and how each idea would be built here: letting the AI write database queries safely,
-  the features kept for later, further uses of AI under the same rules, and what production needs.
+- [Designed, not built](docs/knowledge-base/50-designs/designed-not-built.md): the roadmap, and how
+  each idea would be built here: holds, renewals, imports, letting the AI write database queries
+  safely, further uses of AI under the same rules, and what production needs.
 - [Product spec](docs/knowledge-base/10-product/product-spec.md),
   [architecture](docs/knowledge-base/20-architecture/system-overview.md),
   [decisions](docs/knowledge-base/decisions.md) and [open items](docs/knowledge-base/99-pending.md).
+
+## Licence
+
+[MIT](LICENSE). The first complete version is tagged `v0.1.0`.

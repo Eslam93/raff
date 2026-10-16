@@ -1,4 +1,7 @@
-# Project rule: the library system
+# Project rule: Raff
+
+Raff (رف, "shelf") is a library system for small community libraries, and the owner's own project
+(D-26). It began as a one-day build, tagged `v0.1.0`.
 
 Facts a fresh session would otherwise get wrong. Dated where they can change.
 
@@ -19,9 +22,11 @@ feature work. Scope questions default to **no** unless the spec says yes.
 
 ## Branches and delivery
 
-- One repository, trunk `main`. It was published on 2026-09-20 to the remote `origin` as a single
-  commit (owner's choice, D-22), so a change now means amending that commit and force-pushing it.
-  Pushing and deploying were end tasks (D-14).
+- One repository, `Eslam93/raff`, trunk `main`. Since 2026-10-16 history is normal commits (D-26):
+  each task is cut from `main` on its own branch and lands through a pull request the owner merges.
+  Never force-push `main`. The first version is the tag `v0.1.0`.
+- Nothing is deployed as of 2026-10-16: the AWS demo was torn down (D-25), and hosting on the
+  owner's own machine is still to be decided.
 - Delivery is value-ordered (D-14): every step ends runnable, tested and documented, so work can
   stop after any step. Do not start a step before the previous one is green.
 
@@ -71,7 +76,7 @@ README status, `99-pending.md` and decisions are updated.
 | Copy | one physical copy of a book, with a copy code such as `CP-0001` |
 | Member | a person who borrows; may or may not have a sign-in |
 | Loan | a copy lent to a member, with a due date; active until returned |
-| Borrow / Return | check out / check in. The assignment's wording is reversed; the UI uses Borrow and Return |
+| Borrow / Return | check out / check in, the standard library words (D-03) |
 | Overdue | an active loan past its due date. Derived, never stored |
 | Staff, Member | the only two roles |
 | Activity | the append-only record of actions (who, what, when, and whether via the Copilot) |
