@@ -8,6 +8,9 @@ catalog and lend books; members find books and keep track of what they have borr
 one small machine with Docker, and it has an AI Copilot that works only through the library's own
 actions and never makes up a number.
 
+**Try it: https://raff.eslamhamed.com** Press "Sign in as staff" or "Sign in as member". Both demo
+accounts share one generated library, so anything you change there is visible to the next visitor.
+
 ## What it does
 
 - **A catalog of books and their copies.** A book is the title; each physical copy has its own code
