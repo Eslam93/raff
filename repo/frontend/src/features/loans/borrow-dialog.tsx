@@ -111,14 +111,26 @@ function BorrowContent({ book, copyId, onBorrowed, returnFocusTo, onClose }: Bor
     },
   })
 
-  /** Someone borrowed the chosen copy first: reload the book and move to another copy. */
-  async function recoverFromTakenCopy(takenCopyId: string) {
+  /**
+   * Someone borrowed the chosen copy first, or a return set it aside for a
+   * member's hold: reload the book and move to another copy. `heldMessage` is
+   * the API's sentence for a held copy, which names the member.
+   */
+  async function recoverFromTakenCopy(takenCopyId: string, heldMessage?: string) {
     const takenCode = book.copies.find((copy) => copy.id === takenCopyId)?.code ?? "This copy"
     const fresh = await queryClient
       .fetchQuery({ queryKey: bookKeys.detail(book.id), queryFn: () => fetchBook(book.id) })
       .catch(() => null)
     const nextCopyId = fresh ? firstAvailableCopyId(fresh) : ""
     setValue("copy_id", nextCopyId)
+    if (heldMessage) {
+      setFormError(
+        nextCopyId
+          ? `${heldMessage} Another available copy is now selected: confirm to borrow it.`
+          : `${heldMessage} No other copy of ${book.title} is available now.`,
+      )
+      return
+    }
     setFormError(
       nextCopyId
         ? `${takenCode} was borrowed a moment ago by someone else. Another available copy is now selected: confirm to borrow it.`
@@ -142,6 +154,10 @@ function BorrowContent({ book, copyId, onBorrowed, returnFocusTo, onClose }: Bor
     } catch (error) {
       if (error instanceof ApiError && error.code === "copy_unavailable") {
         await recoverFromTakenCopy(values.copy_id)
+        return
+      }
+      if (error instanceof ApiError && error.code === "copy_held") {
+        await recoverFromTakenCopy(values.copy_id, error.message)
         return
       }
       setFormError(

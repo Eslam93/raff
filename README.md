@@ -16,6 +16,10 @@ actions and never makes up a number.
 - **Borrow and Return.** A circulation desk that works by copy code, due dates, overdue tracking,
   and the loan history of every book and member. Availability is worked out from the loans each
   time, so it is never out of date.
+- **Holds and renewals.** When every copy of a book is out, a member joins the line for it from
+  the book's page. A returned copy is set aside for the first person in line for three days, and
+  the desk sees who it is for. Members renew their own loans, at most twice and not while someone
+  is waiting for the book.
 - **Two roles with their own screens.** Staff manage the catalog, members and circulation, and
   see a dashboard and an activity log. Members browse the catalog and see their own loans and
   history.
@@ -111,7 +115,9 @@ OPENROUTER_API_KEY=<key>
 ```
 
 It only uses Raff's own actions, with the signed-in person's permissions: it never acts on another
-member's data, and declines what Raff does not offer yet, such as holds. It is also held to its
+member's data, and declines what Raff does not offer, such as fines. It can tell a member where they
+are in line for a book, and tell staff who is waiting; placing a hold or renewing is done on the
+page. It is also held to its
 figures: before a reply is sent, every run of digits in it must appear in a lookup result or in
 what the person typed, or the reply is retried once and then replaced by the lookup results as
 plain text.
@@ -133,15 +139,13 @@ and what it would need, and shows the trend instead.
 
 ## What comes next
 
-In this order. Holds, renewals and imports are designed in
+In this order. Imports are designed in
 [Designed, not built](docs/knowledge-base/50-designs/designed-not-built.md); scanning is outlined
 there and gets its full design when its turn comes.
 
-1. **Holds and renewals.** A member joins a queue for a book whose copies are all out, and staff
-   can extend a loan.
-2. **Scan at the desk.** A phone or laptop camera reads an ISBN or a copy's label, and staff print
+1. **Scan at the desk.** A phone or laptop camera reads an ISBN or a copy's label, and staff print
    labels with a QR code for each copy.
-3. **Import from a spreadsheet,** so a library does not type in its books one by one.
+2. **Import from a spreadsheet,** so a library does not type in its books one by one.
 
 After those, an Arabic interface.
 
@@ -190,7 +194,7 @@ Raff is built with an AI coding assistant working inside a small harness of rule
 - [How this was built](docs/knowledge-base/40-method/how-this-was-built.md): who decided what, the
   loop every step followed, and what is enforced mechanically.
 - [Designed, not built](docs/knowledge-base/50-designs/designed-not-built.md): the roadmap, and how
-  each idea would be built here: holds, renewals, imports, letting the AI write database queries
+  each idea would be built here: imports, letting the AI write database queries
   safely, further uses of AI under the same rules, and what production needs.
 - [Product spec](docs/knowledge-base/10-product/product-spec.md),
   [architecture](docs/knowledge-base/20-architecture/system-overview.md),

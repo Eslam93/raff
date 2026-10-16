@@ -21,11 +21,11 @@ import {
 import { renderWithProviders } from "@/test/render"
 
 /**
- * Staff see the book's loan history, so its request always gets an answer: an
- * empty history unless a test gives its own.
+ * Staff see the book's loan history and holds, so those requests always get an
+ * answer: an empty history and nobody waiting unless a test gives its own.
  */
 function stubBookApi(routes: Parameters<typeof stubApi>[0]) {
-  return stubApi({ "GET /api/loans": () => page([]), ...routes })
+  return stubApi({ "GET /api/loans": () => page([]), "GET /api/holds": () => page([]), ...routes })
 }
 
 function renderBook(id = "book-1", user: UserOut = staffUser()) {

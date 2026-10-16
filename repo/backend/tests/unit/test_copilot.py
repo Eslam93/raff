@@ -19,7 +19,7 @@ from app.copilot.numbers import allowed_runs, data_digit_runs, digit_runs, unsup
 from app.copilot.openrouter import OpenRouterClient
 from app.copilot.rate_limit import RateLimiter
 from app.copilot.sse import event_stream, format_event
-from app.copilot.tools import GetMyLoans, PrepareBorrow, SearchCatalog
+from app.copilot.tools import BookHolds, GetMyLoans, MyHolds, PrepareBorrow, SearchCatalog
 from app.core.config import DEFAULT_COPILOT_MODEL, Settings
 
 
@@ -80,6 +80,7 @@ def test_the_role_chooses_the_face_and_its_tools():
         "list_categories",
         "get_book",
         "get_my_loans",
+        "my_holds",
     ]
     assert [tool.name for tool in STAFF_FACE.tools] == [
         "search_catalog",
@@ -88,6 +89,7 @@ def test_the_role_chooses_the_face_and_its_tools():
         "search_members",
         "get_member_loans",
         "get_book_loans",
+        "book_holds",
         "get_overdue_loans",
         "lookup_copy",
         "prepare_borrow",
@@ -124,6 +126,68 @@ def test_the_staff_prompt_leaves_every_change_to_the_confirm():
         assert rule in prompt
     for feature in ("reserve", "renew", "fines", "send messages", "change or delete member"):
         assert feature in prompt
+
+
+@pytest.mark.parametrize("face", FACES.values(), ids=lambda face: face.name)
+def test_the_prompts_know_holds_exist_and_leave_them_to_the_app_for_now(face):
+    prompt = face.prompt
+
+    # Holds and renewals exist now: no prompt may say the app has no such feature.
+    assert "reserve or hold books" not in prompt
+    assert "loans and holds) come only from lookups" in prompt
+    assert "give counts and places in line exactly as the results give them" in prompt
+    assert "Holds have no card" in prompt
+
+
+def test_the_member_prompt_points_holds_and_renewals_to_the_books_page_and_my_loans():
+    prompt = MEMBER_FACE.prompt
+
+    for statement in (
+        "The member places a hold on the book's page, cancels it there or in My loans, and "
+        "renews a loan in My loans.",
+        "You cannot do any of this for them yet",
+        "point to the book's page or My loans",
+        "never guess or describe who has a book or who is waiting for it",
+    ):
+        assert statement in prompt
+
+
+def test_the_staff_prompt_points_holds_and_renewals_to_the_app():
+    prompt = STAFF_FACE.prompt
+
+    for statement in (
+        "You cannot place or cancel holds or renew loans yet.",
+        "a book's page places a hold for a member and cancels holds",
+        "A copy set aside for a member's hold can be lent only to that member.",
+        "who is waiting for it, in line order",
+    ):
+        assert statement in prompt
+
+
+@pytest.mark.parametrize("face", FACES.values(), ids=lambda face: face.name)
+def test_tool_descriptions_hold_no_digits(face):
+    for definition in face.definitions():
+        assert not re.search(r"\d", definition["function"]["description"])
+
+
+def test_my_holds_has_no_identity_parameter():
+    [definition] = [d for d in MEMBER_FACE.definitions() if d["function"]["name"] == "my_holds"]
+
+    parameters = definition["function"]["parameters"]
+    assert set(parameters["properties"]) == {"status"}
+    assert parameters["properties"]["status"]["enum"] == ["open", "closed"]
+    assert MyHolds.model_validate({}).status == "open"
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        MyHolds.model_validate({"member_id": "someone"})
+
+
+def test_book_holds_needs_a_book_and_lists_open_or_closed_holds():
+    book_id = str(uuid.uuid4())
+
+    assert BookHolds.model_validate({"book_id": book_id}).status == "open"
+    for arguments in ({}, {"book_id": book_id, "status": "all"}):
+        with pytest.raises(ValidationError):
+            BookHolds.model_validate(arguments)
 
 
 def test_prepare_borrow_takes_exactly_one_of_a_book_or_a_copy():
@@ -296,6 +360,30 @@ async def test_the_offline_fake_lists_overdue_loans_for_staff_and_own_loans_for_
 
     [call] = first.tool_calls
     assert call.name == tool
+
+
+@pytest.mark.parametrize(
+    ("face", "tool"), [(MEMBER_FACE, "my_holds"), (STAFF_FACE, "search_catalog")]
+)
+async def test_the_offline_fake_looks_up_a_members_own_holds(face, tool):
+    model = FakeModelClient()
+
+    first = await model.complete(
+        [{"role": "user", "content": "Where am I in line for my holds?"}],
+        tools=face.definitions(),
+        tool_choice="auto",
+        timeout=1,
+    )
+    [call] = first.tool_calls
+    second = await model.complete(
+        [{"role": "tool", "tool_call_id": call.id, "content": '{"holds": []}'}],
+        tools=face.definitions(),
+        tool_choice="auto",
+        timeout=1,
+    )
+
+    assert call.name == tool
+    assert second.text == "I found nothing that matches."
 
 
 async def test_a_script_that_runs_out_is_a_model_error():

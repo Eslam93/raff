@@ -27,6 +27,14 @@ export function formatDueDate(iso: string): string {
   return utcDateFormat.format(new Date(iso))
 }
 
+/**
+ * The last day to pick up a copy set aside for a hold. Like a due date, the
+ * API sets it to the end of that day in UTC, so the date is read in UTC.
+ */
+export function formatPickupDate(iso: string): string {
+  return utcDateFormat.format(new Date(iso))
+}
+
 /** A calendar date (YYYY-MM-DD), shown without a time zone shift. */
 export function formatCalendarDate(value: string): string {
   return utcDateFormat.format(new Date(`${value}T00:00:00Z`))

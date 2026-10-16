@@ -2,11 +2,13 @@
 
 Public: health, auth config, demo sign-in, logout and the Google routes (404 here, because the
 test settings do not configure Google). Signed-in: reading the catalog and its categories, the
-current user and My loans (404 no_member_profile for staff, who have no member record) and the
-Copilot (503 copilot_unavailable, because the test settings configure no model). Everything else
-is staff only, including the dashboard, the loans list, copy lookup, member detail, the ISBN
-lookup (503 isbn_lookup_unavailable for staff, because the test settings turn it off) and the
-Copilot's proposals: 401 unauthorized when signed out, 403 forbidden for members.
+current user, My loans and My holds with renewing one's own loan and placing and cancelling one's
+own holds (404 no_member_profile for staff, who have no member record) and the Copilot (503
+copilot_unavailable, because the test settings configure no model). Everything else is staff
+only, including the dashboard, the loans list, renewing any loan, the holds list, placing and
+cancelling holds for members, copy lookup, member detail, the ISBN lookup (503
+isbn_lookup_unavailable for staff, because the test settings turn it off) and the Copilot's
+proposals: 401 unauthorized when signed out, 403 forbidden for members.
 """
 
 import uuid
@@ -45,6 +47,10 @@ ENDPOINTS = [
     Endpoint("GET", "/api/auth/me", 401, 200, 200),
     Endpoint("POST", "/api/auth/logout", 204, 204, 204),
     Endpoint("GET", "/api/me/loans", 401, 200, 404),
+    Endpoint("POST", "/api/me/loans/{my_loan}/renew", 401, 200, 404),
+    Endpoint("GET", "/api/me/holds", 401, 200, 404),
+    Endpoint("POST", "/api/me/holds", 401, 201, 404, lambda world: {"book_id": world["out_book"]}),
+    Endpoint("POST", "/api/me/holds/{my_hold}/cancel", 401, 200, 404),
     Endpoint("GET", "/api/dashboard", 401, 403, 200),
     Endpoint("GET", "/api/books", 401, 200, 200),
     Endpoint("GET", "/api/books/categories", 401, 200, 200),
@@ -69,6 +75,17 @@ ENDPOINTS = [
         lambda world: {"copy_id": world["free_copy"], "member_id": world["member"]},
     ),
     Endpoint("POST", "/api/loans/{loan}/return", 401, 403, 200),
+    Endpoint("POST", "/api/loans/{loan}/renew", 401, 403, 200),
+    Endpoint("GET", "/api/holds", 401, 403, 200),
+    Endpoint(
+        "POST",
+        "/api/holds",
+        401,
+        403,
+        201,
+        lambda world: {"book_id": world["out_book"], "member_id": world["demo_member"]},
+    ),
+    Endpoint("POST", "/api/holds/{my_hold}/cancel", 401, 403, 200),
     Endpoint("GET", "/api/activity", 401, 403, 200),
     Endpoint("GET", "/api/copilot/config", 401, 200, 200),
     # The test settings configure no model, so signed-in users get 503 before any stream.
@@ -82,9 +99,11 @@ ROLES = ["anonymous", "member", "staff"]
 
 
 @pytest.fixture
-async def world(make_book, make_member, borrow, empty_db) -> World:
+async def world(make_book, make_member, borrow, client, empty_db, open_client) -> World:
     """A book with one copy on loan and one free, a book without loans, a member, and a
-    proposal to lend the free copy, prepared for the demo staff account.
+    proposal to lend the free copy, prepared for the demo staff account. For the demo member
+    account: a loan of their own, a hold of their own on a book whose only copy is out, and a
+    second book whose only copy is out, which they have no hold on.
     """
     book = await make_book(copies=2)
     spare = await make_book(title="Spare", author="Nobody")
@@ -99,6 +118,16 @@ async def world(make_book, make_member, borrow, empty_db) -> World:
         copy_code=book["copies"][1]["code"],
         loan_period_days=14,
     )
+    demo_member = (await (await open_client("member")).get("/api/auth/me")).json()["member_id"]
+    held_book = await make_book(title="Held", author="Nobody")
+    await borrow(held_book["copies"][0]["id"], member["id"])
+    hold = await client.post(
+        "/api/holds", json={"book_id": held_book["id"], "member_id": demo_member}
+    )
+    out_book = await make_book(title="Out", author="Nobody")
+    await borrow(out_book["copies"][0]["id"], member["id"])
+    own_book = await make_book(title="Own", author="Nobody")
+    my_loan = (await borrow(own_book["copies"][0]["id"], demo_member)).json()
     return {
         "book": book["id"],
         "spare_book": spare["id"],
@@ -108,6 +137,10 @@ async def world(make_book, make_member, borrow, empty_db) -> World:
         "loan": loan["id"],
         "proposal": str(proposal.id),
         "isbn": "9780547928227",
+        "demo_member": demo_member,
+        "my_loan": my_loan["id"],
+        "my_hold": hold.json()["id"],
+        "out_book": out_book["id"],
     }
 
 

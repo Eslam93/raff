@@ -122,6 +122,32 @@ describe("MemberDetailPage", () => {
     await waitFor(() => expect(requestsTo(fetchMock, "GET /api/members/member-1")).toHaveLength(2))
   })
 
+  it("renews a current loan after confirmation, and says why another cannot be renewed", async () => {
+    const fetchMock = stubApi({
+      "GET /api/members/member-1": () => memberDetail({ loans_total: 2, active_loans: 2 }),
+      "GET /api/loans": ({ search }) =>
+        search.get("status") === "active"
+          ? page([{ ...overdueLoan, can_renew: false }, currentLoan])
+          : page([]),
+      "POST /api/loans/loan-2/renew": () => ({ ...currentLoan, renewals: 1 }),
+    })
+    const user = userEvent.setup()
+    renderMember()
+
+    const current = await screen.findByRole("region", { name: "Current loans" })
+    await within(current).findByRole("link", { name: "Dune" })
+    expect(rowOf("Dune")).toHaveTextContent("Cannot renew: a member is waiting for this book")
+    expect(within(rowOf("Dune")).queryByRole("button", { name: "Renew CP-0001" })).not.toBeInTheDocument()
+
+    await user.click(within(rowOf("Emma")).getByRole("button", { name: "Renew CP-0005" }))
+    const dialog = await screen.findByRole("alertdialog", { name: "Renew this loan?" })
+    expect(dialog).toHaveTextContent("Emma (CP-0005), borrowed by Maya Hassan")
+    await user.click(within(dialog).getByRole("button", { name: "Renew" }))
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+    expect(requestsTo(fetchMock, "POST /api/loans/loan-2/renew")).toHaveLength(1)
+  })
+
   it("shows a not-found state for a member that does not exist", async () => {
     stubApi({
       "GET /api/members/missing": () => errorResponse(404, "not_found", "The member was not found."),

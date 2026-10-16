@@ -14,8 +14,10 @@ from app.models.copilot import (
     ProposalStatus,
 )
 from app.models.copy import COPY_CODE_SEQUENCE, Copy
+from app.models.hold import Hold, HoldStatus
 from app.models.loan import Loan
 from app.models.member import Member
+from app.models.renewal import Renewal
 from app.models.user import User, UserRole
 from app.models.user_session import UserSession
 
@@ -30,10 +32,13 @@ __all__ = [
     "CopilotProposal",
     "CopilotRole",
     "Copy",
+    "Hold",
+    "HoldStatus",
     "Loan",
     "Member",
     "ProposalAction",
     "ProposalStatus",
+    "Renewal",
     "User",
     "UserRole",
     "UserSession",

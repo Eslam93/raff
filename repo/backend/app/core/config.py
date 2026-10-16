@@ -23,6 +23,11 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # moderate price (chosen from OpenRouter's model list, 2026-09-19). COPILOT_MODEL overrides it.
 DEFAULT_COPILOT_MODEL = "google/gemini-3.8-flash"
 
+# The lending rules for holds and renewals (D-27). The services fall back to these when a caller,
+# such as a Copilot proposal, passes no setting.
+DEFAULT_HOLD_PICKUP_DAYS = 3
+DEFAULT_MAX_RENEWALS = 2
+
 
 def _split_commas(value: object) -> object:
     """Splits "a, b,,c" into ["a", "b", "c"]. A list, from code or tests, is kept as is."""
@@ -52,6 +57,15 @@ class Settings(BaseSettings):
     session_secret: SecretStr = SecretStr(DEV_SESSION_SECRET)
     # A loan is due this many days after it is borrowed, unless staff choose another date.
     loan_period_days: int = Field(default=14, ge=1, le=90)
+    # A ready hold waits this many days for pick-up, until the end of the last day (UTC).
+    hold_pickup_days: int = Field(default=DEFAULT_HOLD_PICKUP_DAYS, ge=1, le=14)
+    # Open holds, waiting or ready, that one member can have at once.
+    max_open_holds: int = Field(default=5, ge=1, le=50)
+    # How many times one loan can be renewed.
+    max_renewals: int = Field(default=DEFAULT_MAX_RENEWALS, ge=0, le=10)
+    # How often the holds sweep runs: it expires ready holds past their pick-up date and gives
+    # the copies they free to the next member in line. 0 turns it off.
+    hold_sweep_seconds: int = Field(default=60, ge=0, le=86400)
 
     # Sign-in. Unset, DEMO_LOGIN_ENABLED is true everywhere except production.
     demo_login_enabled: bool = True

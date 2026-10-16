@@ -5,7 +5,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import CurrentUser, PageLimit, PageOffset, SearchQuery, StaffUser
+from app.api.deps import (
+    AppSettings,
+    CurrentUser,
+    PageLimit,
+    PageOffset,
+    SearchQuery,
+    StaffUser,
+)
 from app.db.session import DbSession
 from app.schemas.books import (
     BookCreate,
@@ -74,9 +81,12 @@ async def create_book(session: DbSession, user: StaffUser, body: BookCreate) -> 
 @router.get("/{book_id}", responses=error_responses(signed_in=True, not_found=True))
 async def get_book(session: DbSession, user: CurrentUser, book_id: uuid.UUID) -> BookDetail:
     """For members, a borrowed copy shows when it is due back but not who has it
-    (active_loan is null).
+    (active_loan is null), and a held copy shows as held but not for whom (held_for is null).
+    my_hold is the signed-in member's open hold on the book; null for staff.
     """
-    return await catalog.get_book_detail(session, book_id, show_borrowers=user.is_staff)
+    return await catalog.get_book_detail(
+        session, book_id, show_borrowers=user.is_staff, member_id=user.member_id
+    )
 
 
 @router.patch(
@@ -106,6 +116,13 @@ async def delete_book(session: DbSession, user: StaffUser, book_id: uuid.UUID) -
     responses=error_responses(staff=True, not_found=True, conflicts=["book_archived"]),
 )
 async def add_copies(
-    session: DbSession, user: StaffUser, book_id: uuid.UUID, body: CopiesCreate
+    session: DbSession,
+    settings: AppSettings,
+    user: StaffUser,
+    book_id: uuid.UUID,
+    body: CopiesCreate,
 ) -> BookDetail:
-    return await catalog.add_copies(session, book_id, body.count, actor=user)
+    """New copies are set aside for the members waiting for the book, oldest hold first."""
+    return await catalog.add_copies(
+        session, book_id, body.count, hold_pickup_days=settings.hold_pickup_days, actor=user
+    )

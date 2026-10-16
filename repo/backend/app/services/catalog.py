@@ -1,7 +1,8 @@
 """Books and their copies: search, detail, add, edit, delete or archive, and adding copies.
 
-Availability is counted from active loans when reading, never stored. Archived books and
-archived copies are out of circulation: they are not listed or counted.
+Availability is counted when reading, never stored, by the one free-copy rule
+(app.services.availability): a copy on loan or set aside for a member's hold is not available.
+Archived books and archived copies are out of circulation: they are not listed or counted.
 """
 
 import uuid
@@ -9,10 +10,12 @@ from typing import Any, Literal
 
 from sqlalchemy import ColumnElement, Label, and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from app.core.config import DEFAULT_HOLD_PICKUP_DAYS
 from app.core.exceptions import ConflictError, NotFoundError
 from app.db.errors import flush_or_raise
-from app.models import COPY_CODE_SEQUENCE, ActivityVia, Book, Copy, Loan, Member, User
+from app.models import COPY_CODE_SEQUENCE, ActivityVia, Book, Copy, Hold, Loan, Member, User
 from app.models.book import ACTIVE_ISBN_INDEX
 from app.models.copy import format_copy_code
 from app.schemas.books import (
@@ -26,8 +29,9 @@ from app.schemas.books import (
     LoanBrief,
 )
 from app.schemas.common import Page
+from app.schemas.loans import HeldFor
 from app.schemas.members import MemberRef
-from app.services import activity
+from app.services import activity, availability, holds
 from app.services.circulation import is_overdue
 from app.services.isbn import isbn_search_fragment
 from app.services.text_search import contains, search_term
@@ -53,24 +57,20 @@ def _book_has_active_loans() -> ConflictError:
 # Queries
 
 
-def _active_loan_on(copy_id: Any) -> ColumnElement[bool]:
-    return exists().where(Loan.copy_id == copy_id, Loan.returned_at.is_(None))
-
-
 def _in_circulation() -> ColumnElement[bool]:
     return and_(Copy.book_id == Book.id, Copy.archived_at.is_(None))
 
 
 def _has_available_copy() -> ColumnElement[bool]:
-    return exists().where(_in_circulation(), ~_active_loan_on(Copy.id)).correlate(Book)
+    return exists().where(_in_circulation(), availability.is_free()).correlate(Book)
 
 
 def _availability_columns() -> tuple[Label[int], Label[int]]:
-    """Counts of the book's copies in circulation, and of those not on loan."""
+    """Counts of the book's copies in circulation, and of those free to borrow now."""
     total = select(func.count()).where(_in_circulation()).correlate(Book).scalar_subquery()
     available = (
         select(func.count())
-        .where(_in_circulation(), ~_active_loan_on(Copy.id))
+        .where(_in_circulation(), availability.is_free())
         .correlate(Book)
         .scalar_subquery()
     )
@@ -140,7 +140,8 @@ async def list_books(
     offset: int,
 ) -> Page[BookSummary]:
     """category matches the whole category name, ignoring letter case. available_only keeps
-    books with at least one copy not on loan. recent puts the books added most recently first.
+    books with at least one copy on the shelf: neither on loan nor held for a member. recent puts
+    the books added most recently first.
     """
     conditions: list[ColumnElement[bool]] = [Book.archived_at.is_(None)]
     search = _search_condition(q)
@@ -177,10 +178,16 @@ async def list_categories(session: AsyncSession) -> list[str]:
 
 
 async def get_book_detail(
-    session: AsyncSession, book_id: uuid.UUID, *, show_borrowers: bool = True
+    session: AsyncSession,
+    book_id: uuid.UUID,
+    *,
+    show_borrowers: bool = True,
+    member_id: uuid.UUID | None = None,
 ) -> BookDetail:
     """Archived books stay readable here, marked archived. Without show_borrowers, a borrowed
-    copy shows only when it is due back, never who has it (what members see).
+    copy shows only when it is due back, and a held copy only that it is held, never who has it
+    or who it is set aside for (what members see). With member_id, my_hold is that member's
+    open hold on the book.
     """
     found = (
         await session.execute(
@@ -197,19 +204,33 @@ async def get_book_detail(
         raise NotFoundError("Book not found.")
     book, copies_total, copies_available, has_loan_history = found._tuple()
 
+    ready = aliased(Hold)
+    holder = aliased(Member)
     copy_rows = await session.execute(
-        select(Copy, Loan, Member.full_name, is_overdue())
+        select(Copy, Loan, Member.full_name, is_overdue(), ready, holder.full_name)
         .outerjoin(Loan, and_(Loan.copy_id == Copy.id, Loan.returned_at.is_(None)))
         .outerjoin(Member, Member.id == Loan.member_id)
+        .outerjoin(ready, and_(ready.copy_id == Copy.id, availability.is_live_ready(ready)))
+        .outerjoin(holder, holder.id == ready.member_id)
         .where(Copy.book_id == book.id, Copy.archived_at.is_(None))
         # CP-0999 before CP-1000 before CP-10000.
         .order_by(func.length(Copy.code), Copy.code)
         .execution_options(populate_existing=True)
     )
     copies = [
-        _copy_out(copy, loan, member_name, bool(overdue), show_borrower=show_borrowers)
-        for copy, loan, member_name, overdue in copy_rows.tuples()
+        _copy_out(
+            copy,
+            loan,
+            member_name,
+            bool(overdue),
+            _held_for(hold, holder_name),
+            show_borrower=show_borrowers,
+        )
+        for copy, loan, member_name, overdue, hold, holder_name in copy_rows.tuples()
     ]
+    my_hold = None
+    if member_id is not None:
+        my_hold = await holds.open_hold(session, book_id=book.id, member_id=member_id)
     return BookDetail(
         **_summary(book, copies_total, copies_available).model_dump(),
         description=book.description,
@@ -218,15 +239,45 @@ async def get_book_detail(
         created_at=book.created_at,
         updated_at=book.updated_at,
         copies=copies,
+        holds_waiting=await holds.waiting_count(session, book.id),
+        my_hold=my_hold,
+    )
+
+
+def _held_for(hold: Hold | None, member_name: str | None) -> HeldFor | None:
+    if hold is None or member_name is None or hold.pickup_by is None:
+        return None
+    return HeldFor(
+        member=MemberRef(id=hold.member_id, full_name=member_name), pickup_by=hold.pickup_by
     )
 
 
 def _copy_out(
-    copy: Copy, loan: Loan | None, member_name: str | None, overdue: bool, *, show_borrower: bool
+    copy: Copy,
+    loan: Loan | None,
+    member_name: str | None,
+    overdue: bool,
+    held: HeldFor | None,
+    *,
+    show_borrower: bool,
 ) -> CopyOut:
     if loan is None or member_name is None:
+        if held is not None:
+            return CopyOut(
+                id=copy.id,
+                code=copy.code,
+                status="held",
+                due_at=None,
+                active_loan=None,
+                held_for=held if show_borrower else None,
+            )
         return CopyOut(
-            id=copy.id, code=copy.code, status="available", due_at=None, active_loan=None
+            id=copy.id,
+            code=copy.code,
+            status="available",
+            due_at=None,
+            active_loan=None,
+            held_for=None,
         )
     brief = LoanBrief(
         id=loan.id,
@@ -241,6 +292,7 @@ def _copy_out(
         status="borrowed",
         due_at=loan.due_at,
         active_loan=brief if show_borrower else None,
+        held_for=None,
     )
 
 
@@ -358,8 +410,11 @@ async def delete_book(
     actor: User | None,
 ) -> DeleteOutcome:
     """Deletes a book that never had a loan, archives one with loan history, and refuses while
-    a copy is on loan. Deleting an archived book again changes nothing.
+    a copy is on loan. Deleting an archived book again changes nothing. Open holds on a book that
+    leaves the catalog are cancelled.
     """
+    # Before the book's row is locked, as every change to the book's holds does.
+    await holds.lock_book_line(session, book_id)
     book = await _get_book_for_change(session, book_id)
     if book.archived_at is not None:
         await session.commit()
@@ -371,6 +426,7 @@ async def delete_book(
         raise _book_has_active_loans()
 
     title, isbn = book.title, book.isbn
+    await holds.cancel_open_holds_of_book(session, book.id, via=via, actor=actor)
     if await session.scalar(select(_book_has_loans(book.id))):
         book.archived_at = func.now()
         await session.execute(
@@ -408,9 +464,15 @@ async def add_copies(
     book_id: uuid.UUID,
     count: int,
     *,
+    hold_pickup_days: int = DEFAULT_HOLD_PICKUP_DAYS,
     via: ActivityVia = "ui",
     actor: User | None,
 ) -> BookDetail:
+    """Adds copies, then settles the book's holds: the new copies are set aside for the members
+    in line, oldest hold first.
+    """
+    # Before the book's row is locked, as every change to the book's holds does.
+    await holds.lock_book_line(session, book_id)
     book = await _get_book_for_change(session, book_id)
     if book.archived_at is not None:
         raise _book_archived()
@@ -425,6 +487,10 @@ async def add_copies(
         details={"copies": codes},
         via=via,
         actor=actor,
+    )
+    await session.flush()
+    await holds.settle_book(
+        session, book.id, hold_pickup_days=hold_pickup_days, via=via, actor=actor
     )
     await session.commit()
     return await get_book_detail(session, book.id)

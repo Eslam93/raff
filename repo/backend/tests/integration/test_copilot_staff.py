@@ -282,6 +282,7 @@ async def test_the_member_face_keeps_its_own_tools_and_loan_data(make_book, borr
         "list_categories",
         "get_book",
         "get_my_loans",
+        "my_holds",
     ]
     assert tool_results(model, 1)[0]["error"] == "unknown_tool"
     [loan] = tool_results(model, 2)[1]["loans"]

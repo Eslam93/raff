@@ -6,6 +6,7 @@ import type {
   CopyLookupOut,
   CopyOut,
   DashboardOut,
+  HoldOut,
   LoanOut,
   MemberDetailOut,
   MemberOut,
@@ -57,7 +58,7 @@ export function bookSummary(overrides: Partial<BookSummary> = {}): BookSummary {
 }
 
 export function availableCopy(id: string, code: string): CopyOut {
-  return { id, code, status: "available", due_at: null, active_loan: null }
+  return { id, code, status: "available", due_at: null, active_loan: null, held_for: null }
 }
 
 export function borrowedCopy(id: string, code: string, overdue = false): CopyOut {
@@ -73,12 +74,28 @@ export function borrowedCopy(id: string, code: string, overdue = false): CopyOut
       due_at: "2026-09-15T23:59:59Z",
       is_overdue: overdue,
     },
+    held_for: null,
   }
 }
 
 /** A borrowed copy as a member sees it: the due time, never the loan. */
 export function copyOnLoan(id: string, code: string, dueAt: string): CopyOut {
-  return { id, code, status: "borrowed", due_at: dueAt, active_loan: null }
+  return { id, code, status: "borrowed", due_at: dueAt, active_loan: null, held_for: null }
+}
+
+/** A copy set aside for a member's ready hold, as staff see it: who it waits for, and until when. */
+export function heldCopy(id: string, code: string, memberName = "Maya Hassan"): CopyOut {
+  return {
+    id,
+    code,
+    status: "held",
+    due_at: null,
+    active_loan: null,
+    held_for: {
+      member: { id: "member-1", full_name: memberName },
+      pickup_by: "2026-10-19T23:59:59Z",
+    },
+  }
 }
 
 export function bookDetail(overrides: Partial<BookDetail> = {}): BookDetail {
@@ -99,6 +116,8 @@ export function bookDetail(overrides: Partial<BookDetail> = {}): BookDetail {
     created_at: "2026-09-01T09:00:00Z",
     updated_at: "2026-09-01T09:00:00Z",
     copies,
+    holds_waiting: 0,
+    my_hold: null,
     ...overrides,
   }
 }
@@ -125,8 +144,39 @@ export function loan(overrides: Partial<LoanOut> = {}): LoanOut {
     returned_at: null,
     is_overdue: false,
     days_overdue: 0,
+    renewals: 0,
+    can_renew: true,
     ...overrides,
   }
+}
+
+/** A member waiting in line for Dune: number 1 unless the overrides say otherwise. */
+export function hold(overrides: Partial<HoldOut> = {}): HoldOut {
+  return {
+    id: "hold-1",
+    status: "waiting",
+    book: { id: "book-1", title: "Dune", author: "Frank Herbert" },
+    member: { id: "member-1", full_name: "Maya Hassan" },
+    copy: null,
+    placed_at: "2026-10-10T09:00:00Z",
+    ready_at: null,
+    pickup_by: null,
+    closed_at: null,
+    position: 1,
+    ...overrides,
+  }
+}
+
+/** A hold whose copy is set aside: Maya Hassan picks up CP-0012 by 19 Oct 2026. */
+export function readyHold(overrides: Partial<HoldOut> = {}): HoldOut {
+  return hold({
+    status: "ready",
+    copy: { id: "copy-12", code: "CP-0012" },
+    ready_at: "2026-10-16T10:00:00Z",
+    pickup_by: "2026-10-19T23:59:59Z",
+    position: null,
+    ...overrides,
+  })
 }
 
 export function memberDetail(overrides: Partial<MemberDetailOut> = {}): MemberDetailOut {
@@ -174,6 +224,7 @@ export function copyLookup(overrides: Partial<CopyLookupOut> = {}): CopyLookupOu
     status: activeLoan ? "borrowed" : "available",
     archived: false,
     active_loan: activeLoan,
+    held_for: null,
     ...overrides,
   }
 }

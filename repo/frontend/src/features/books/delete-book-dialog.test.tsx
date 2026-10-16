@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest"
 import { DeleteBookDialog } from "@/features/books/delete-book-dialog"
 import type { BookDetail } from "@/lib/types"
 import { errorResponse, requestsTo, stubApi } from "@/test/api-stub"
-import { availableCopy, bookDetail, borrowedCopy } from "@/test/fixtures"
+import { availableCopy, bookDetail, borrowedCopy, heldCopy } from "@/test/fixtures"
 import { renderWithProviders } from "@/test/render"
 
 const onShelf = [availableCopy("copy-1", "CP-0001"), availableCopy("copy-2", "CP-0002")]
@@ -55,6 +55,17 @@ describe("DeleteBookDialog", () => {
 
     expect(await screen.findByText("Catalog page")).toBeInTheDocument()
     expect(success).toHaveBeenCalledWith("Archived Dune")
+  })
+
+  it("says the open holds on the book are cancelled with it", () => {
+    stubApi({})
+    renderDialog(
+      bookDetail({ has_loan_history: true, copies: [heldCopy("copy-1", "CP-0001")], holds_waiting: 2 }),
+    )
+
+    expect(screen.getByRole("alertdialog", { name: "Archive Dune?" })).toHaveTextContent(
+      "Its copies can no longer be borrowed. 3 open holds on it are cancelled.",
+    )
   })
 
   it("explains up front that a book with a copy on loan cannot be removed", () => {

@@ -25,6 +25,8 @@ DETAIL_FIELDS = SUMMARY_FIELDS | {
     "created_at",
     "updated_at",
     "copies",
+    "holds_waiting",
+    "my_hold",
 }
 
 
@@ -63,7 +65,7 @@ async def test_add_book_creates_it_with_its_first_copy(client):
     assert book["has_loan_history"] is False
     assert book["archived"] is False
     [copy] = book["copies"]
-    assert set(copy) == {"id", "code", "status", "due_at", "active_loan"}
+    assert set(copy) == {"id", "code", "status", "due_at", "active_loan", "held_for"}
     assert copy["status"] == "available"
     assert copy["due_at"] is None
     assert copy["active_loan"] is None

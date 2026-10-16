@@ -5,8 +5,8 @@ raise or a delay. It records every request it receives, so tests can check what 
 shown. Without a script it runs a simple offline mode for development without a key (the
 COPILOT_FAKE_MODEL setting, which production refuses): it lists the overdue loans for staff,
 forecasts staff's loans when asked for a forecast, counts staff's loans by month or by category
-when asked what is borrowed most or per month, looks up the member's loans or searches the
-catalog for the words of the message, then says it found something.
+when asked what is borrowed most or per month, looks up the member's holds or loans or searches
+the catalog for the words of the message, then says it found something.
 """
 
 import asyncio
@@ -21,6 +21,7 @@ from typing import Any
 from app.copilot.model import Message, ModelError, ModelReply, ToolCall, ToolChoice, Usage
 
 _LOAN_WORDS = re.compile(r"\b(loans?|due|overdue|borrowed|my books?)\b")
+_HOLD_WORDS = re.compile(r"\b(holds?|in line|reserved?|reservations?)\b")
 _FIGURE_WORDS = re.compile(r"\b(most|per month|by month)\b")
 # Words the offline mode leaves out of a search.
 _FILLER = frozenset(
@@ -121,7 +122,7 @@ def _offline_step(messages: Sequence[Message], tool_names: list[str]) -> FakeSte
     last = messages[-1]
     if last["role"] == "tool":
         result = json.loads(last["content"])
-        lists = ("books", "loans", "rows")
+        lists = ("books", "loans", "holds", "rows")
         empty = "error" in result or any(result.get(key) == [] for key in lists)
         return reply("I found nothing that matches." if empty else "Here is what I found.")
 
@@ -136,6 +137,8 @@ def _offline_step(messages: Sequence[Message], tool_names: list[str]) -> FakeSte
         return call(
             "query_metrics", metric="loans", group_by="category", period={"preset": "this_quarter"}
         )
+    if "my_holds" in tool_names and _HOLD_WORDS.search(text):
+        return call("my_holds")
     if "get_my_loans" in tool_names and _LOAN_WORDS.search(text):
         return call("get_my_loans", status="active")
     if "categor" in text:

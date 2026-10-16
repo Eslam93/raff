@@ -48,6 +48,12 @@ function DeleteBookContent({ book, onClose }: { book: BookDetail; onClose: () =>
   const copiesOnLoan = book.copies.filter((copy) => copy.status === "borrowed").length
   const refused = copiesOnLoan > 0 || refusal !== null
   const archives = book.has_loan_history
+  // Removing the book cancels the holds on it: the members waiting and the copies set aside.
+  const openHolds = book.holds_waiting + book.copies.filter((copy) => copy.status === "held").length
+  const holdsNote =
+    openHolds > 0
+      ? ` ${plural(openHolds, "open hold", "open holds")} on it ${openHolds === 1 ? "is" : "are"} cancelled.`
+      : ""
 
   async function confirm() {
     setFailure(null)
@@ -91,8 +97,8 @@ function DeleteBookContent({ book, onClose }: { book: BookDetail; onClose: () =>
         </AlertDialogTitle>
         <AlertDialogDescription>
           {archives
-            ? `${book.title} will be archived: hidden from the catalog, its loan history kept. Its copies can no longer be borrowed.`
-            : `${book.title} will be permanently deleted, with its ${plural(book.copies_total, "copy", "copies")}. It has never been borrowed, so no history is lost. This cannot be undone.`}
+            ? `${book.title} will be archived: hidden from the catalog, its loan history kept. Its copies can no longer be borrowed.${holdsNote}`
+            : `${book.title} will be permanently deleted, with its ${plural(book.copies_total, "copy", "copies")}. It has never been borrowed, so no history is lost.${holdsNote} This cannot be undone.`}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <FormAlert title={`Could not ${archives ? "archive" : "delete"} the book`} message={failure} />

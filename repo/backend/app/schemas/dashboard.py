@@ -11,7 +11,8 @@ class DashboardCounts(BaseModel):
 
     titles: int
     copies: int
-    # Copies in circulation that are on the shelf, and those on loan. Together: copies.
+    # Copies in circulation that are on the shelf (free to borrow), and those on loan. A copy set
+    # aside for a member's hold is in neither, so the two add up to copies only without holds.
     available: int
     on_loan: int
     overdue: int

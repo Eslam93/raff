@@ -18,6 +18,8 @@ LOAN_FIELDS = {
     "returned_at",
     "is_overdue",
     "days_overdue",
+    "renewals",
+    "can_renew",
 }
 
 

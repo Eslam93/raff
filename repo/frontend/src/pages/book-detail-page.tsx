@@ -18,6 +18,10 @@ import { CopiesTable } from "@/features/books/copies-table"
 import { isCopyOverdue } from "@/features/books/copy-status"
 import { DeleteBookDialog } from "@/features/books/delete-book-dialog"
 import { useBook } from "@/features/books/hooks"
+import { BookHoldsSection } from "@/features/holds/book-holds-section"
+import type { HeldCopy } from "@/features/holds/held-copy"
+import { LendHeldCopyDialog } from "@/features/holds/lend-held-copy-dialog"
+import { MemberHoldPanel } from "@/features/holds/member-hold-panel"
 import { BorrowDialog } from "@/features/loans/borrow-dialog"
 import { LoansPanel } from "@/features/loans/loans-panel"
 import { ReturnDialog } from "@/features/loans/return-dialog"
@@ -25,7 +29,7 @@ import { loanOfCopy, type ReturnableLoan } from "@/features/loans/returnable-loa
 import { useNow } from "@/hooks/use-now"
 import { ApiError } from "@/lib/api"
 import { formatDate, plural } from "@/lib/format"
-import type { BookDetail } from "@/lib/types"
+import type { BookDetail, CopyOut } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 function BackToCatalog() {
@@ -98,15 +102,35 @@ function BookDetailView({ book }: { book: BookDetail }) {
     open: false,
     loan: null,
   })
+  const [lending, setLending] = useState<{ open: boolean; held: HeldCopy | null }>({
+    open: false,
+    held: null,
+  })
 
   const firstAvailable = book.copies.find((copy) => copy.status === "available")
   const onLoan = book.copies.filter((copy) => copy.status === "borrowed")
+  const held = book.copies.filter((copy) => copy.status === "held").length
   const overdue = onLoan.filter((copy) => isCopyOverdue(copy, now)).length
   const borrowBlocked = firstAvailable
     ? null
     : book.copies.length === 0
       ? "No copies yet. Add a copy to lend this book."
-      : "Every copy is on loan. Return one to lend it again."
+      : held > 0
+        ? "Every copy is on loan or set aside for a hold."
+        : "Every copy is on loan. Return one to lend it again."
+
+  function lendHeldCopy(copy: CopyOut) {
+    if (!copy.held_for) return
+    setLending({
+      open: true,
+      held: {
+        book,
+        copy: { id: copy.id, code: copy.code },
+        member: copy.held_for.member,
+        pickup_by: copy.held_for.pickup_by,
+      },
+    })
+  }
 
   const closeDialog = (open: boolean) => {
     if (!open) setDialog(null)
@@ -187,16 +211,25 @@ function BookDetailView({ book }: { book: BookDetail }) {
             <p className="text-muted-foreground">
               {plural(book.copies_total, "copy", "copies")} in total, {book.copies_available}{" "}
               available, {onLoan.length} on loan
+              {held > 0 && `, ${held} set aside for ${held === 1 ? "a hold" : "holds"}`}
               {overdue > 0 && (
                 <span className="font-medium text-overdue-foreground">, {overdue} overdue</span>
               )}
               .
             </p>
+            {book.holds_waiting > 0 && (
+              <p className="text-muted-foreground">
+                {book.holds_waiting === 1
+                  ? "1 member is waiting in line."
+                  : `${book.holds_waiting} members are waiting in line.`}
+              </p>
+            )}
             {borrowBlocked && canChange && (
               <p id="borrow-blocked" className="text-muted-foreground">
                 {borrowBlocked}
               </p>
             )}
+            {!isStaff && <MemberHoldPanel book={book} />}
           </CardContent>
         </Card>
       </div>
@@ -226,14 +259,26 @@ function BookDetailView({ book }: { book: BookDetail }) {
             <CopiesTable
               copies={book.copies}
               showBorrowers={isStaff}
+              myHeldCopyId={book.my_hold?.status === "ready" ? book.my_hold.copy?.id : null}
               onBorrow={canChange ? (copy) => setBorrow({ open: true, copyId: copy.id }) : undefined}
               onReturn={
                 canChange ? (copy) => setReturning({ open: true, loan: loanOfCopy(book, copy) }) : undefined
               }
+              onLend={canChange ? lendHeldCopy : undefined}
             />
           </Card>
         )}
       </section>
+
+      {/* Who is waiting is for staff only; a member sees their own hold above. A new book starts at page 1. */}
+      {isStaff && !book.archived && (
+        <BookHoldsSection
+          key={`holds-${book.id}`}
+          book={book}
+          canChange={canChange}
+          onLend={(heldCopy) => setLending({ open: true, held: heldCopy })}
+        />
+      )}
 
       {/* Who borrowed a copy is for staff only; members never see it. A new book starts at page 1. */}
       {isStaff && (
@@ -266,6 +311,11 @@ function BookDetailView({ book }: { book: BookDetail }) {
             loan={returning.loan}
             open={returning.open}
             onOpenChange={(open) => setReturning((current) => ({ ...current, open }))}
+          />
+          <LendHeldCopyDialog
+            target={lending.held}
+            open={lending.open}
+            onOpenChange={(open) => setLending((current) => ({ ...current, open }))}
           />
         </>
       )}

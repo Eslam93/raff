@@ -19,6 +19,18 @@ export function returnLoan(loanId: string) {
   })
 }
 
+/** Moves an active loan's due date by the loan period. Staff renew any member's loan. */
+export function renewLoan(loanId: string) {
+  return apiRequest<LoanOut>(`/api/loans/${encodeURIComponent(loanId)}/renew`, { method: "POST" })
+}
+
+/** Renews one of the signed-in member's own active loans. Another member's loan is 404. */
+export function renewMyLoan(loanId: string) {
+  return apiRequest<LoanOut>(`/api/me/loans/${encodeURIComponent(loanId)}/renew`, {
+    method: "POST",
+  })
+}
+
 /** The signed-in member's own loans. The API answers 404 no_member_profile for a user without one. */
 export function fetchMyLoans(params: MyLoansParams, signal?: AbortSignal) {
   return apiRequest<Page<LoanOut>>(withSearchParams("/api/me/loans", params), { signal })

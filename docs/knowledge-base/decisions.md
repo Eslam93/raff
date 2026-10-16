@@ -15,6 +15,46 @@ reverify_when: Whenever a decision is made or superseded, and at each delivery s
 One entry per real fork, newest first. Fields: decision · options considered · why · decided by ·
 reversible or not · revisit when · supersedes.
 
+### D-28 · Members make their first changes: their own holds and renewals
+
+- **Decision:** a signed-in member can place and cancel their own holds and renew their own active
+  loans, through `/api/me/...` routes that act only on that member's records (another member's
+  record answers 404). Until now members could only read. Staff can do the same for any member.
+  The Copilot does not place, cancel or renew for anyone yet; it reads holds only.
+- **Options:** members ask staff for everything; members act on their own records; the Copilot
+  acts for members through confirmed proposals.
+- **Why:** a hold or a renewal is the member's own request about their own loan, and making them
+  ask staff for it is the most common reason a small library's members would come to the desk.
+  Copilot proposals for members change the proposal flow, which is staff-only today (D-07), so they
+  wait for their own step.
+- **By:** Claude under the owner's delegation, 2026-10-16 ("go truly unattended") · **Reversible:**
+  yes; the routes can be removed without a data change
+- **Revisit when:** members misuse holds (for example holding many books to block them), or the
+  Copilot gains member proposals.
+- **Supersedes:** the read-only member role of D-02, for these two actions only
+
+### D-27 · Lending rules for holds and renewals
+
+- **Decision:** a hold can be placed only when no copy of the book is on the shelf; a member has at
+  most five open holds; a returned copy goes straight to the first member in line and waits three
+  days for pick-up, then the next in line gets it; only that member can borrow a copy set aside for
+  them. A loan can be renewed at most twice, never while someone is waiting for the book; a renewal
+  moves the due date to the later of today and the current due date, plus the loan period, and an
+  overdue loan can be renewed. Each number is a setting (`HOLD_PICKUP_DAYS`, `MAX_OPEN_HOLDS`,
+  `MAX_RENEWALS`). Expiry needs no scheduler from the host: the app sweeps once a minute, and every
+  change to a book's copies settles its holds first.
+- **Options:** for holds, allow a hold even when a copy is free, or only when none is; for
+  renewals, renew from today or from the due date, and allow or refuse overdue renewals; for
+  expiry, a job started by the host or a loop inside the app.
+- **Why:** these are the common defaults of small libraries and the simplest rules to explain at a
+  desk. A loop inside the app keeps Raff a single container on one machine; it is correct with one
+  app process, and settling on every change keeps it correct between sweeps.
+- **By:** Claude under the owner's delegation, 2026-10-16 ("go truly unattended") · **Reversible:**
+  yes; every number is a setting, and the rules live in one service
+- **Revisit when:** a library asks for different rules per category or member group (L14,
+  configurable lending policies), or Raff runs more than one app process.
+- **Supersedes:** none
+
 ### D-26 · The project continues as Raff, a side project for small community libraries
 
 - **Decision:** the library system becomes Raff (رف, "shelf"), the owner's own project, for small

@@ -103,11 +103,15 @@ async def chat(
 
 
 @router.get("/proposals/{proposal_id}", responses=error_responses(staff=True, not_found=True))
-async def get_proposal(session: DbSession, user: StaffUser, proposal_id: uuid.UUID) -> ProposalOut:
+async def get_proposal(
+    session: DbSession, settings: AppSettings, user: StaffUser, proposal_id: uuid.UUID
+) -> ProposalOut:
     """A proposal the Copilot prepared for this user. A pending proposal past expires_at reads
     as expired. 404 for another user's proposal, like a missing one.
     """
-    return await proposals.get(session, proposal_id, user_id=user.id)
+    return await proposals.get(
+        session, proposal_id, user_id=user.id, max_renewals=settings.max_renewals
+    )
 
 
 @router.post(
@@ -135,7 +139,12 @@ async def confirm_proposal(
     book_archived come back as they are, anything else as proposal_failed with the reason.
     """
     return await proposals.confirm(
-        session, proposal_id, user=user, loan_period_days=settings.loan_period_days
+        session,
+        proposal_id,
+        user=user,
+        loan_period_days=settings.loan_period_days,
+        hold_pickup_days=settings.hold_pickup_days,
+        max_renewals=settings.max_renewals,
     )
 
 

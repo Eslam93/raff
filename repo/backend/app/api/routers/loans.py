@@ -1,4 +1,4 @@
-"""Circulation: the loans list, borrowing and returning copies. Staff only."""
+"""Circulation: the loans list, borrowing, returning and renewing copies. Staff only."""
 
 import uuid
 
@@ -23,6 +23,7 @@ router = APIRouter(prefix="/loans", tags=["loans"], dependencies=[Depends(requir
 @router.get("", responses=error_responses(staff=True))
 async def list_loans(
     session: DbSession,
+    settings: AppSettings,
     status: LoanListStatus = "active",
     q: SearchQuery = None,
     member_id: uuid.UUID | None = None,
@@ -42,6 +43,7 @@ async def list_loans(
         book_id=book_id,
         limit=limit,
         offset=offset,
+        max_renewals=settings.max_renewals,
     )
 
 
@@ -49,14 +51,18 @@ async def list_loans(
     "",
     status_code=status.HTTP_201_CREATED,
     responses=error_responses(
-        staff=True, not_found=True, conflicts=["copy_unavailable", "book_archived"]
+        staff=True,
+        not_found=True,
+        conflicts=["copy_unavailable", "copy_held", "book_archived"],
     ),
 )
 async def borrow(
     session: DbSession, settings: AppSettings, user: StaffUser, body: LoanCreate
 ) -> LoanOut:
     """Lends a copy to a member. Without due_date the loan is due after the loan period.
-    due_date must be after today and at most 90 days ahead.
+    due_date must be after today and at most 90 days ahead. A copy set aside for a member's hold
+    can be lent only to that member (copy_held otherwise); borrowing fulfils the member's open
+    hold on the book.
     """
     return await circulation.borrow(
         session,
@@ -64,6 +70,8 @@ async def borrow(
         member_id=body.member_id,
         due_date=body.due_date,
         loan_period_days=settings.loan_period_days,
+        hold_pickup_days=settings.hold_pickup_days,
+        max_renewals=settings.max_renewals,
         actor=user,
     )
 
@@ -72,5 +80,46 @@ async def borrow(
     "/{loan_id}/return",
     responses=error_responses(staff=True, not_found=True, conflicts=["loan_already_returned"]),
 )
-async def return_loan(session: DbSession, user: StaffUser, loan_id: uuid.UUID) -> LoanOut:
-    return await circulation.return_loan(session, loan_id, actor=user)
+async def return_loan(
+    session: DbSession, settings: AppSettings, user: StaffUser, loan_id: uuid.UUID
+) -> LoanOut:
+    """Returns the copy. When members are waiting for the book, the copy is set aside for the
+    first in line, and the copy lookup shows who it is held for.
+    """
+    return await circulation.return_loan(
+        session,
+        loan_id,
+        hold_pickup_days=settings.hold_pickup_days,
+        max_renewals=settings.max_renewals,
+        actor=user,
+    )
+
+
+@router.post(
+    "/{loan_id}/renew",
+    responses=error_responses(
+        staff=True,
+        not_found=True,
+        conflicts=[
+            "loan_already_returned",
+            "renewal_limit_reached",
+            "book_has_holds",
+            "renewal_not_needed",
+            "loan_changed",
+        ],
+    ),
+)
+async def renew_loan(
+    session: DbSession, settings: AppSettings, user: StaffUser, loan_id: uuid.UUID
+) -> LoanOut:
+    """Moves the due date to the later of today and the current due date, plus the loan period,
+    at most 90 days from today. A loan can be renewed MAX_RENEWALS times, and not while a member
+    is waiting for the book. An overdue loan can be renewed.
+    """
+    return await circulation.renew(
+        session,
+        loan_id,
+        loan_period_days=settings.loan_period_days,
+        max_renewals=settings.max_renewals,
+        actor=user,
+    )

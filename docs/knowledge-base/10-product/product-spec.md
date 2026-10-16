@@ -49,7 +49,8 @@ permission-aware AI layer over those real capabilities, instead of a generic cha
 | AI writes | only after the user confirms the exact proposed action |
 | Analyst | read-only; answers are computed from the data, never generated |
 | Demo data | generated from reader personas: three years of history |
-| Out of scope | branches, fines and payments, notifications (full list in section 6); holds and renewals are on the roadmap (section 5) |
+| Holds and renewals | a hold only when no copy is on the shelf; a returned copy goes to the first in line; renewals at most twice, never while someone waits (D-27) |
+| Out of scope | branches, fines and payments, notifications (full list in section 6) |
 
 ## 1 · Core: catalog and circulation
 
@@ -97,6 +98,8 @@ These make Raff a real product. All are built in `v0.1.0`.
 | E16 | **Finished UX states.** Empty, loading, error, validation, success, confirmation | the cheapest way to make the product feel finished |
 | E17 | **ISBN lookup and covers.** In the add-book form, "Look up" fills title, author and year from the ISBN; covers show in the catalog and on a book's page | added 2026-09-19: cheap and visibly more usable (D-13) |
 | E18 | **Public notices.** A privacy notice and terms, readable without signing in | added 2026-09-20: a sign-in provider asks for them before it lets any account in (D-24) |
+| E19 | **Holds.** A member, or staff for a member, places a hold on a book with no copy on the shelf, sees the place in line, and cancels it. A returned copy is set aside for the first in line for a few days, and only that member can borrow it | added 2026-10-16, roadmap 1 (L01, D-27, D-28) |
+| E20 | **Renewals.** A member renews their own loan and staff renew any loan, at most twice and not while someone is waiting for the book | added 2026-10-16, roadmap 1 (L02, D-27, D-28) |
 
 Staff navigation: **Dashboard, Catalog, Circulation, Members, Activity.**
 Member navigation: **Catalog, My loans, History.**
@@ -133,9 +136,11 @@ components (book cards, loan tables), not only as text.
 | A-M02 | **Explain availability.** "Can I borrow Dune?" → "Two copies exist; one is available now." | get availability |
 | A-M03 | **My loans.** "What do I have?", "When is The Hobbit due?", "Anything overdue?" | my loans, my history (no member id parameter: it is always the signed-in member) |
 | A-M04 | **Guide by doing.** "How do I find books about machine learning?" runs the search and shows results instead of describing clicks | search catalog |
+| A-M05 | **My holds.** "Where am I in line for Dune?", "Is anything waiting for me?" | my holds; holds in availability results |
 
-The member face does not pretend to reserve, renew, contact staff or take payments: those features
-do not exist yet. Holds and renewals are first on the roadmap (section 5).
+The member face does not place or cancel holds or renew loans for the member: it tells them to use
+the book's page or My loans (D-28). It does not contact staff or take payments: those features do
+not exist.
 
 ### 3.2 Staff face
 
@@ -145,6 +150,7 @@ do not exist yet. Holds and renewals are first on the roadmap (section 5).
 | A-S02 | **Prepare a borrow.** "Borrow The Hobbit for Maya." → resolves member, book and an available copy, shows the due date, asks to confirm | the same lookups, then borrow after confirmation |
 | A-S03 | **Prepare a return.** "Return Maya's Hobbit." → resolves the active loan, asks to confirm | the same lookups, then return after confirmation |
 | A-S04 | **Investigate.** "Why does Dune show unavailable?", "Show this member's history." | the lookups above |
+| A-S05 | **Holds.** "Who is waiting for Dune?", "Is a copy set aside for Maya?" | book holds; holds in availability results |
 
 Write actions available to the AI: **Borrow and Return only.** No deletion, bulk operations, member
 changes, or permission changes. The pattern for every write: intent → resolve entities → show the
@@ -208,13 +214,14 @@ would still have left a working Copilot.
 ## 5 · The roadmap, and later
 
 Extensions not built in `v0.1.0`. Since 2026-10-16, four are Raff's next steps, in this order (D-26):
-holds and renewals (L01, L02), scanning at the desk with printed copy labels (L16), and imports from
-a spreadsheet (L07). The designs are in `../50-designs/designed-not-built.md`.
+holds and renewals (L01, L02, built on 2026-10-16 as E19 and E20), scanning at the desk with printed
+copy labels (L16), and imports from a spreadsheet (L07). The designs are in
+`../50-designs/designed-not-built.md`.
 
 | ID | Feature | Why later |
 |---|---|---|
-| L01 | Reservations and holds | **next, roadmap 1** |
-| L02 | Renewals | **next, roadmap 1** |
+| L01 | Reservations and holds | **built 2026-10-16** as E19 |
+| L02 | Renewals | **built 2026-10-16** as E20 |
 | L03 | Email or SMS reminders | external communication infrastructure |
 | L04 | Fines | payments and policy complexity |
 | L05 | Lost or damaged workflows | operational depth a small library does not need yet |

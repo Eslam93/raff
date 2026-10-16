@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useReturnLoan } from "@/features/loans/hooks"
+import { returnedMessage, useReturnLoan } from "@/features/loans/hooks"
 import type { ReturnableLoan } from "@/features/loans/returnable-loan"
 import { useDialogSession } from "@/hooks/use-dialog-session"
 import { ApiError } from "@/lib/api"
@@ -30,7 +30,10 @@ type ReturnDialogProps = {
   returnFocusTo?: RefObject<HTMLElement | null>
 }
 
-/** Confirms a return: the loan closes and the copy is available again. */
+/**
+ * Confirms a return: the loan closes and the copy is available again, or set
+ * aside for the first member waiting for the book.
+ */
 export function ReturnDialog({ loan, open, onOpenChange, onReturned, returnFocusTo }: ReturnDialogProps) {
   const session = useDialogSession(open)
   return (
@@ -60,11 +63,9 @@ function ReturnContent({ loan, onReturned, returnFocusTo, onClose }: ReturnConte
   async function confirm() {
     setFailure(null)
     try {
-      const returned = await returnLoan.mutateAsync(loan.id)
-      toast.success(
-        `Returned ${returned.book.title} (${returned.copy.code}) from ${returned.member.full_name}`,
-      )
-      onReturned?.(returned)
+      const result = await returnLoan.mutateAsync(loan.id)
+      toast.success(returnedMessage(result))
+      onReturned?.(result.loan)
       onClose()
     } catch (error) {
       if (error instanceof ApiError && error.code === "loan_already_returned") {
@@ -91,7 +92,8 @@ function ReturnContent({ loan, onReturned, returnFocusTo, onClose }: ReturnConte
         <AlertDialogDescription>
           {loan.book.title} ({loan.copy.code}), borrowed by {loan.member.full_name} on{" "}
           {formatDate(loan.borrowed_at)}, due {formatDueDate(loan.due_at)}
-          {loan.is_overdue ? " (overdue)" : ""}. The copy becomes available again.
+          {loan.is_overdue ? " (overdue)" : ""}. The copy becomes available again, or is set
+          aside for the first member waiting for the book.
         </AlertDialogDescription>
       </AlertDialogHeader>
       <FormAlert title="Could not return the copy" message={failure} />

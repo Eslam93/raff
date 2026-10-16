@@ -37,6 +37,8 @@ def make_app(tmp_path: Path) -> Callable[..., FastAPI]:
             "openrouter_api_key": None,
             "copilot_fake_model": False,
             "isbn_lookup_enabled": False,
+            # No holds sweep in the background: a test that needs it turns it on or runs it.
+            "hold_sweep_seconds": 0,
             **overrides,
         }
         return create_app(Settings(_env_file=None, **values))
