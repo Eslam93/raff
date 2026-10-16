@@ -13,8 +13,10 @@ import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BorrowByBook } from "@/features/circulation/borrow-by-book"
 import { CopyDesk } from "@/features/circulation/copy-desk"
+import { PickupPanel } from "@/features/holds/pickup-panel"
 import { useLoans } from "@/features/loans/hooks"
 import { LoansTable } from "@/features/loans/loans-table"
+import { RenewDialog } from "@/features/loans/renew-dialog"
 import { ReturnDialog } from "@/features/loans/return-dialog"
 import { useUrlSearch } from "@/hooks/use-url-search"
 import type { LoanListStatus, LoanOut } from "@/lib/types"
@@ -33,7 +35,10 @@ function readStatus(value: string | null): LoanListStatus {
   return loanTabs.find((tab) => tab.status === value)?.status ?? "active"
 }
 
-/** The staff workspace for the desk: return or borrow by copy code or by book, and every loan below. */
+/**
+ * The staff workspace for the desk: return or borrow by copy code or by book,
+ * the copies waiting for members to pick them up, and every loan below.
+ */
 export function CirculationPage() {
   const codeInput = useRef<HTMLInputElement>(null)
 
@@ -45,6 +50,7 @@ export function CirculationPage() {
         actions={<BorrowByBook returnFocusTo={codeInput} />}
       />
       <CopyDesk inputRef={codeInput} />
+      <PickupPanel returnFocusTo={codeInput} />
       <LoansSection returnFocusTo={codeInput} />
     </>
   )
@@ -57,8 +63,12 @@ function LoansSection({ returnFocusTo }: { returnFocusTo: RefObject<HTMLElement 
   const status = readStatus(searchParams.get("status"))
   const offset = (search.page - 1) * PAGE_SIZE
   const loans = useLoans({ status, q: search.q || undefined, limit: PAGE_SIZE, offset })
-  // The dialog keeps its loan while closing, so the closing animation shows it.
+  // The dialogs keep their loan while closing, so the closing animation shows it.
   const [returning, setReturning] = useState<{ open: boolean; loan: LoanOut | null }>({
+    open: false,
+    loan: null,
+  })
+  const [renewing, setRenewing] = useState<{ open: boolean; loan: LoanOut | null }>({
     open: false,
     loan: null,
   })
@@ -108,6 +118,7 @@ function LoansSection({ returnFocusTo }: { returnFocusTo: RefObject<HTMLElement 
               <LoansTable
                 loans={page.items}
                 onReturn={(loan) => setReturning({ open: true, loan })}
+                onRenew={(loan) => setRenewing({ open: true, loan })}
               />
             </Card>
             <Pager
@@ -146,6 +157,12 @@ function LoansSection({ returnFocusTo }: { returnFocusTo: RefObject<HTMLElement 
         loan={returning.loan}
         open={returning.open}
         onOpenChange={(open) => setReturning((current) => ({ ...current, open }))}
+        returnFocusTo={returnFocusTo}
+      />
+      <RenewDialog
+        loan={renewing.loan}
+        open={renewing.open}
+        onOpenChange={(open) => setRenewing((current) => ({ ...current, open }))}
         returnFocusTo={returnFocusTo}
       />
     </section>

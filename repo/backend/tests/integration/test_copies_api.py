@@ -4,7 +4,7 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-LOOKUP_FIELDS = {"copy", "book", "status", "archived", "active_loan"}
+LOOKUP_FIELDS = {"copy", "book", "status", "archived", "active_loan", "held_for"}
 
 
 def number_of(code: str) -> str:

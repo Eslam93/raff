@@ -67,7 +67,14 @@ export type LoanBrief = {
   is_overdue: boolean
 }
 
-export type CopyStatus = "available" | "borrowed"
+/** available: on the shelf. borrowed: lent out. held: set aside for a member's ready hold. */
+export type CopyStatus = "available" | "borrowed" | "held"
+
+/** Who a held copy is set aside for, and until when: the end of that day in UTC. */
+export type HeldFor = {
+  member: MemberRef
+  pickup_by: string
+}
 
 export type CopyOut = {
   id: string
@@ -77,6 +84,8 @@ export type CopyOut = {
   due_at: string | null
   /** Who has the copy. Always null for members, who never see another member's loans. */
   active_loan: LoanBrief | null
+  /** Who a held copy is set aside for. Always null for members, like active_loan. */
+  held_for: HeldFor | null
 }
 
 export type BookDetail = BookSummary & {
@@ -86,6 +95,10 @@ export type BookDetail = BookSummary & {
   created_at: string
   updated_at: string
   copies: CopyOut[]
+  /** Members in line for the book: its waiting holds. */
+  holds_waiting: number
+  /** The signed-in member's open hold on the book. Always null for staff. */
+  my_hold: HoldOut | null
 }
 
 export type MemberOut = {
@@ -112,6 +125,10 @@ export type LoanOut = {
   is_overdue: boolean
   /** Whole days past the due date. 0 when the loan is not overdue. */
   days_overdue: number
+  /** How many times the loan was renewed. */
+  renewals: number
+  /** Active, renewed fewer times than allowed, and nobody waiting for the book. */
+  can_renew: boolean
 }
 
 /** A copy found by its code at the circulation desk, with its loan when it is out. */
@@ -122,6 +139,30 @@ export type CopyLookupOut = {
   /** The copy or its book is archived, so it cannot be borrowed. */
   archived: boolean
   active_loan: LoanOut | null
+  /** Who the copy is set aside for while it is held. */
+  held_for: HeldFor | null
+}
+
+/**
+ * waiting: in line. ready: a copy is set aside until pickup_by. fulfilled: the
+ * member borrowed the book. A ready hold past its pick-up time reads as expired.
+ */
+export type HoldStatus = "waiting" | "ready" | "fulfilled" | "cancelled" | "expired"
+
+export type HoldOut = {
+  id: string
+  status: HoldStatus
+  book: BookRef
+  member: MemberRef
+  /** The copy set aside, once the hold is ready. */
+  copy: CopyRef | null
+  placed_at: string
+  ready_at: string | null
+  /** The end of the last day to pick the copy up (UTC), once the hold is ready. */
+  pickup_by: string | null
+  closed_at: string | null
+  /** Place in line, 1 for the next member to get a copy. Only while waiting. */
+  position: number | null
 }
 
 export type DashboardCounts = {
@@ -186,6 +227,17 @@ export type LoanCreate = {
   due_date?: string
 }
 
+/** Staff place a hold for a member. */
+export type HoldCreate = {
+  book_id: string
+  member_id: string
+}
+
+/** A member places a hold for themselves. */
+export type MyHoldCreate = {
+  book_id: string
+}
+
 export type DemoSignIn = {
   role: Role
 }
@@ -216,6 +268,29 @@ export type LoansParams = {
   offset?: number
 }
 
+/**
+ * Which holds a list shows: open (waiting and ready, the default), one of
+ * them, closed (fulfilled, cancelled or expired), or all. Ready holds come
+ * first, the soonest pick-up first, then waiting holds in line order.
+ */
+export type HoldListStatus = "waiting" | "ready" | "open" | "closed" | "all"
+
+/** Filters for GET /api/holds, for staff. */
+export type HoldsParams = {
+  status?: HoldListStatus
+  book_id?: string
+  member_id?: string
+  limit?: number
+  offset?: number
+}
+
+/** The signed-in member's own holds. */
+export type MyHoldsParams = {
+  status?: HoldListStatus
+  limit?: number
+  offset?: number
+}
+
 /** Paging and search parameters shared by the list endpoints. */
 export type ListParams = {
   q?: string
@@ -233,7 +308,7 @@ export type BookSort = "title" | "author" | "year_desc" | "recent"
 export type BooksParams = ListParams & {
   /** A whole category name; letter case does not matter. */
   category?: string
-  /** Only books with at least one copy that is not on loan. */
+  /** Only books with at least one copy on the shelf: not on loan and not held for a member. */
   available_only?: boolean
   sort?: BookSort
 }

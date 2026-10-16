@@ -22,6 +22,7 @@ type LoansPanelProps = {
   showBook?: boolean
   showMember?: boolean
   onReturn?: (loan: LoanOut) => void
+  onRenew?: (loan: LoanOut) => void
   empty: { icon: LucideIcon; title: string; description: string }
   className?: string
 }
@@ -35,6 +36,7 @@ export function LoansPanel({
   showBook,
   showMember,
   onReturn,
+  onRenew,
   empty,
   className,
 }: LoansPanelProps) {
@@ -74,6 +76,7 @@ export function LoansPanel({
                 showBook={showBook}
                 showMember={showMember}
                 onReturn={onReturn}
+                onRenew={onRenew}
               />
             </Card>
             <Pager

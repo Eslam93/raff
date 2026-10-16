@@ -17,6 +17,28 @@ Everything found and not acted on. One line each, same turn, grouped by who can 
 
 ## 3 · We can do this ourselves
 
+- `P2` Holds and renewals have no Copilot proposals: the Copilot reads holds but cannot place,
+  cancel or renew for anyone (D-28). Adding them means member proposals, which are staff-only
+  today (D-07).
+- `P2` A Copilot confirm of a borrow refused because the copy is set aside for another member
+  answers `proposal_failed` with the reason, not `copy_held` as its own code like
+  `copy_unavailable` (`repo/backend/app/copilot/proposals.py`).
+- `P2` The web app writes the renewal limit and the loan period as constants
+  (`repo/frontend/src/features/loans/renewal.ts`), so "renewed N of M" and the date the renew
+  dialog promises are wrong if an operator changes `MAX_RENEWALS` or `LOAN_PERIOD_DAYS`; whether
+  Renew is offered still comes from the API. Expose them on `/api/auth/config`.
+- `P2` `can_renew` is true for a loan already due 90 days ahead, which the API then refuses with
+  `renewal_not_needed`. Fold that rule into `can_renew`.
+- `P2` Nobody is told when a copy is set aside for them: there is no email yet. Members see it in
+  My loans and on the book's page. Comes with L03, email reminders.
+- `P2` The demo seed creates no holds or renewals, so a fresh demo library shows empty holds lists
+  until someone places one.
+- `P2` `demo-debt` The holds sweep runs in every app process. With more than one process each
+  would sweep; the advisory lock keeps it correct, but the work repeats.
+- `P2` Searching the catalog through the Copilot asks for each listed book's line and the member's
+  own hold separately (up to 20 small queries for 10 books). Batch them in one query.
+- `?` The web app's sign-in page test failed once under a slow full run on 2026-10-16 and passed
+  alone and in later runs. Watch it; quarantine if it repeats.
 - `P1` The privacy notice and terms (`repo/frontend/src/pages/notices-page.tsx`) are written for a
   demonstration with generated data. A library that runs Raff for real people needs its own: make
   the operator, the contact and the data kept a setting or an editable page before the first real

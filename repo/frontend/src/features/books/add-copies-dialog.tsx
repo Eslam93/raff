@@ -69,7 +69,9 @@ function AddCopiesContent({ book, onClose }: { book: BookDetail; onClose: () => 
       <DialogHeader>
         <DialogTitle>Add copies</DialogTitle>
         <DialogDescription>
-          New copies of {book.title} are available to borrow at once.
+          {book.holds_waiting > 0
+            ? `New copies of ${book.title} are set aside for the ${plural(book.holds_waiting, "member", "members")} waiting, first in line first. Any others are available to borrow at once.`
+            : `New copies of ${book.title} are available to borrow at once.`}
         </DialogDescription>
       </DialogHeader>
       <form noValidate onSubmit={handleSubmit(save)} className="grid gap-4">

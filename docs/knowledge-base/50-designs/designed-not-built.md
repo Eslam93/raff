@@ -25,7 +25,7 @@ before it is built.
 
 | Order | What | Design |
 |---|---|---|
-| 1 | Holds and renewals | L01 and L02 below |
+| 1 | Holds and renewals | **built 2026-10-16** (E19, E20 in the spec; rules in D-27, D-28); the designs below are kept as the reasoning |
 | 2 | Scan at the desk: a camera reads an ISBN or a copy's label, and staff print a QR label per copy | outline below; the full design comes with its brief |
 | 3 | Import books and members from a spreadsheet | L07 below |
 | then | An Arabic interface | not designed yet |
@@ -105,9 +105,13 @@ The spec's "Later, not now" list holds fourteen extensions, L01 to L15 without L
 
 ### L01, holds
 
+**Built on 2026-10-16** as E19, following this design: the shared free-copy rule, settling a book's holds inside every change to its copies, and a sweep inside the app instead of a host job (D-27).
+
 A `holds` table with two partial unique indexes, one open hold per member and book and one ready hold per copy, where place in line is derived. On return the oldest waiting hold is taken with `FOR UPDATE SKIP LOCKED` inside the return transaction, and a ready hold is live only while its pickup time is later than the database clock, so an unclaimed hold releases its copy with no write. The real risk is that availability is written out separately in at least six places across three services, so the first task is one shared free-copy expression. 5 to 7 hours, plus the member proposal change and 1 hour for the promotion job. Left out because section 6 rules out reservations.
 
 ### L02, renewals
+
+**Built on 2026-10-16** as E20, with the lending choices this design left open made in D-27.
 
 A renew function beside borrow and return. The due date column keeps the current due date, so overdue, due soon and every metric keep working, while a renewals table keeps the previous and new due dates. One conditional update on the loan id, the unreturned state and the due date seen, so two renewals cannot both count. 2 to 3 hours, plus 1 hour for the Copilot tool. Left out because every rule, from the renewal limit to the treatment of a waiting hold, is a lending-policy choice the owner has not made.
 

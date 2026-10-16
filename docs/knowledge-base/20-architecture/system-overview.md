@@ -1,12 +1,13 @@
 ---
 title: How the system is built - components, data model, request flows, security controls and tests
 status: verified
-as_of: 2026-09-20
-last_verified: 2026-09-20
+as_of: 2026-10-16
+last_verified: 2026-10-16
 verification_method: Updated after step 7 and again on 2026-09-20 after the deployment, from the code as published, the builders' reports, the full gate (verify.sh --full, 23/23 with REQUIRE_DB=1) and browser walks of every step's checklist against the Docker stack, including live Copilot turns
 scope: The application in repo/ as of step 7 (core, sign-in and roles, operations, the Copilot with its member, staff and analyst faces, confirmed Borrow and Return, typed metric queries and forecasts, ISBN lookup and covers, catalog filters). Exploratory questions (A-X06) are designed, not built
 confidence: High for structure and flows, each read from code or exercised in a browser walk. Medium for performance claims, measured once on one machine
 known_gaps: No load test. Google sign-in is covered by tests against a fake identity provider and was exercised against Google on 2026-09-19 and 2026-09-20. The Copilot has been run live with one model only. The deployment of 2026-09-20 (operations.md) has had no users but its owner, so nothing here is measured under real traffic
+supersedes: the 2026-09-20 version, which predates holds and renewals (E19, E20)
 reverify_when: A step changes a layer, a table, a security control or the Copilot loop
 ---
 
@@ -46,8 +47,12 @@ Every error leaves as one envelope: `{"error": {"code", "message", "details"}, "
 | `users`, `sessions` | sign-in | sessions store only a SHA-256 of the cookie token |
 | `copilot_conversations`, `copilot_messages` | Copilot memory | a conversation belongs to one user and one face |
 | `copilot_proposals` | Borrow and Return the Copilot prepared | bound to the user who asked; pending for 10 minutes; confirmed, cancelled, failed or expired once |
+| `holds` | a member in line for a book, then a copy set aside for them (since 2026-10-16) | one open hold per member and book; one ready hold per copy (partial unique indexes); place in line derived |
+| `renewals` | each renewal of a loan: previous and new due time | a loan's renewal count is its number of rows |
 
-Availability and overdue are derived in queries, never stored. Deleting a book with loan history
+Availability and overdue are derived in queries, never stored. Since 2026-10-16 one expression
+decides whether a copy is on the shelf (`repo:repo/backend/app/services/availability.py`): in the
+catalog, not on loan, and not set aside by a ready hold whose pick-up time is still ahead. Deleting a book with loan history
 archives it instead (E15).
 
 ## Request flows
@@ -56,6 +61,20 @@ archives it instead (E15).
 and one activity event in one transaction. Two simultaneous borrows of one copy: the unique index
 rejects the second and the service turns it into 409 `copy_unavailable`. Verified by an
 integration test that races two real connections (`repo:repo/backend/tests/integration/test_concurrency.py`).
+
+**Holds.** Every change to a book's copies or line (borrow, return, add copies, place, cancel)
+first settles the book's holds in its own transaction, under a per-book advisory lock taken before
+any row lock: ready holds past their pick-up time expire, then each free copy is set aside for the
+oldest waiting hold. A loop in the app's lifespan settles any book that needs it once a minute
+(`HOLD_SWEEP_SECONDS`), so expiry needs no job from the host. A copy set aside can be lent only to
+its member (409 `copy_held`), and borrowing it fulfils the hold (D-27). Verified by integration
+tests on PostgreSQL, including races of two real connections
+(`repo:repo/backend/tests/integration/test_holds_concurrency.py`), and a browser walk on
+2026-10-16.
+
+**Renew.** One conditional update on the loan id, unreturned, and the due time that was read, so a
+double submit counts once (409 `loan_changed`), then a `renewals` row. Refused at the renewal
+limit, while someone waits for the book, and when the loan is already due at the 90-day limit.
 
 **Sign-in.** Demo sign-in (`POST /api/auth/demo`) or Google (`/api/auth/google/login` and
 `/callback`, OpenID Connect with PKCE through authlib). Either way the server creates a random

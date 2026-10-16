@@ -16,6 +16,7 @@ const badgeVariants = cva(
         available: "bg-available-surface text-available-foreground",
         borrowed: "bg-borrowed-surface text-borrowed-foreground",
         overdue: "bg-overdue-surface text-overdue-foreground",
+        held: "bg-accent text-accent-foreground",
       },
     },
     defaultVariants: {

@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/states/loading-state"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { LoansPanel } from "@/features/loans/loans-panel"
+import { RenewDialog } from "@/features/loans/renew-dialog"
 import { ReturnDialog } from "@/features/loans/return-dialog"
 import { useMember } from "@/features/members/hooks"
 import { ApiError } from "@/lib/api"
@@ -74,8 +75,12 @@ export function MemberDetailPage() {
 
 /** A member's profile, the copies they have now, and what they borrowed before. */
 function MemberDetailView({ member }: { member: MemberDetailOut }) {
-  // The dialog keeps its loan while closing, so the closing animation shows it.
+  // The dialogs keep their loan while closing, so the closing animation shows it.
   const [returning, setReturning] = useState<{ open: boolean; loan: LoanOut | null }>({
+    open: false,
+    loan: null,
+  })
+  const [renewing, setRenewing] = useState<{ open: boolean; loan: LoanOut | null }>({
     open: false,
     loan: null,
   })
@@ -102,6 +107,7 @@ function MemberDetailView({ member }: { member: MemberDetailOut }) {
         pageSize={CURRENT_PAGE_SIZE}
         showMember={false}
         onReturn={(loan) => setReturning({ open: true, loan })}
+        onRenew={(loan) => setRenewing({ open: true, loan })}
         empty={{
           icon: BookMarked,
           title: "Nothing on loan",
@@ -126,6 +132,11 @@ function MemberDetailView({ member }: { member: MemberDetailOut }) {
         loan={returning.loan}
         open={returning.open}
         onOpenChange={(open) => setReturning((current) => ({ ...current, open }))}
+      />
+      <RenewDialog
+        loan={renewing.loan}
+        open={renewing.open}
+        onOpenChange={(open) => setRenewing((current) => ({ ...current, open }))}
       />
     </>
   )

@@ -1,7 +1,8 @@
 """Application factory. Run with: uvicorn app.main:create_app --factory"""
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import httpx
 from fastapi import FastAPI
@@ -22,6 +23,7 @@ from app.middleware.errors import UnhandledErrorMiddleware
 from app.middleware.origin_check import OriginCheckMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.services import holds
 from app.services.isbn_lookup import IsbnLookup
 
 DOCS_URL = "/api/docs"
@@ -32,14 +34,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(settings.log_level, json=settings.is_production)
 
     engine = create_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
     # The Copilot's connection pool to the model service, and the ISBN lookup's to Open Library.
     # Neither opens a connection until used.
     copilot_http = httpx.AsyncClient()
     isbn_http = httpx.AsyncClient()
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(running_app: FastAPI) -> AsyncIterator[None]:
+        # The holds sweep runs beside the requests while the app is up, unless turned off.
+        sweeper = None
+        if settings.hold_sweep_seconds > 0:
+            sweeper = asyncio.create_task(
+                holds.run_sweeps(
+                    session_factory,
+                    every_seconds=settings.hold_sweep_seconds,
+                    hold_pickup_days=settings.hold_pickup_days,
+                ),
+                name="hold-sweeps",
+            )
+        running_app.state.hold_sweeper = sweeper
         yield
+        if sweeper is not None:
+            sweeper.cancel()
+            with suppress(asyncio.CancelledError):
+                await sweeper
         await copilot_http.aclose()
         await isbn_http.aclose()
         await engine.dispose()
@@ -56,7 +75,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.engine = engine
-    app.state.session_factory = create_session_factory(engine)
+    app.state.session_factory = session_factory
+    # The running holds sweep while the app is up (see lifespan); None when turned off.
+    app.state.hold_sweeper = None
     app.state.google = create_google_client(settings)
     # None when no model is configured: the Copilot then shows as unavailable.
     app.state.copilot_model = create_model_client(settings, copilot_http)

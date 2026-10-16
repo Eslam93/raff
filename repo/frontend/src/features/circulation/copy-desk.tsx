@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode, type RefObject } from "react"
 import {
+  BookmarkCheck,
   CircleAlert,
   HandHelping,
   Loader2,
@@ -21,28 +22,50 @@ import { Label } from "@/components/ui/label"
 import { normalizeCopyCode } from "@/features/circulation/copy-code"
 import { CopyLookupBadge } from "@/features/circulation/copy-lookup-badge"
 import { useCopyLookup } from "@/features/circulation/hooks"
+import type { HeldCopy } from "@/features/holds/held-copy"
+import { LendHeldCopyDialog } from "@/features/holds/lend-held-copy-dialog"
 import { BookLink } from "@/features/loans/book-link"
 import { BorrowBookDialog } from "@/features/loans/borrow-book-dialog"
-import { useBorrowByBookId, useReturnLoan } from "@/features/loans/hooks"
+import {
+  returnedMessage,
+  useBorrowByBookId,
+  useReturnLoan,
+  type ReturnResult,
+} from "@/features/loans/hooks"
 import { MemberLink } from "@/features/members/member-link"
 import { ApiError } from "@/lib/api"
-import { formatDate, formatDueDate } from "@/lib/format"
-import type { CopyLookupOut, LoanOut } from "@/lib/types"
+import { formatDate, formatDueDate, formatPickupDate } from "@/lib/format"
+import type { CopyLookupOut, HeldFor, LoanOut } from "@/lib/types"
 
 type CopyDeskProps = {
   /** The copy-code box. The page sends focus back here after every action, ready for the next scan. */
   inputRef: RefObject<HTMLInputElement | null>
 }
 
+/** A return that set the copy aside for the first member waiting for its book. */
+type SetAside = {
+  code: string
+  title: string
+  heldFor: HeldFor
+}
+
 /**
  * The circulation desk: type or scan a copy code and press Enter. A copy on
- * loan shows its loan with Return; an available copy offers Borrow. After
- * either, the box is empty and focused for the next code.
+ * loan shows its loan with Return; an available copy offers Borrow; a copy
+ * held for a member shows who and until when, and Borrow lends it to them.
+ * After any of these, the box is empty and focused for the next code. When a
+ * return sets the copy aside for a hold, the desk says so until the next code.
  */
 export function CopyDesk({ inputRef }: CopyDeskProps) {
   const [draft, setDraft] = useState("")
   const [code, setCode] = useState<string | null>(null)
   const [notACode, setNotACode] = useState<string | null>(null)
+  const [setAside, setSetAside] = useState<SetAside | null>(null)
+  // The dialog keeps its copy while closing, so the closing animation shows it.
+  const [lending, setLending] = useState<{ open: boolean; held: HeldCopy | null }>({
+    open: false,
+    held: null,
+  })
   const lookup = useCopyLookup(code)
   const borrow = useBorrowByBookId()
 
@@ -52,6 +75,7 @@ export function CopyDesk({ inputRef }: CopyDeskProps) {
     if (!typed) return
     const normalized = normalizeCopyCode(typed)
     borrow.clearLoadError()
+    setSetAside(null)
     setNotACode(normalized ? null : typed)
     if (normalized && normalized === code) void lookup.refetch()
     setCode(normalized)
@@ -64,8 +88,15 @@ export function CopyDesk({ inputRef }: CopyDeskProps) {
     setDraft("")
     setCode(null)
     setNotACode(null)
+    setSetAside(null)
     borrow.clearLoadError()
     inputRef.current?.focus()
+  }
+
+  /** Ready for the next code, still saying where the returned copy goes when a hold took it. */
+  function returned({ loan, heldFor }: ReturnResult) {
+    clear()
+    if (heldFor) setSetAside({ code: loan.copy.code, title: loan.book.title, heldFor })
   }
 
   const found = lookup.data
@@ -82,7 +113,9 @@ export function CopyDesk({ inputRef }: CopyDeskProps) {
         found={found}
         busy={lookup.isFetching}
         onDone={clear}
+        onReturned={returned}
         onBorrow={() => borrow.start(found.book.id, found.copy.id)}
+        onLend={(held) => setLending({ open: true, held })}
         borrowLoading={borrow.loading}
         borrowError={borrow.loadError}
       />
@@ -107,6 +140,20 @@ export function CopyDesk({ inputRef }: CopyDeskProps) {
         <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
         Looking up {code}…
       </p>
+    )
+  } else if (setAside) {
+    const member = setAside.heldFor.member.full_name
+    result = (
+      <Alert role="status" className="max-w-2xl">
+        <BookmarkCheck aria-hidden />
+        <AlertTitle>
+          {setAside.code} is held for {member}
+        </AlertTitle>
+        <AlertDescription>
+          The return set this copy aside for the first member waiting for {setAside.title}. Keep it
+          at the desk for {member} until {formatPickupDate(setAside.heldFor.pickup_by)}.
+        </AlertDescription>
+      </Alert>
     )
   }
 
@@ -152,6 +199,13 @@ export function CopyDesk({ inputRef }: CopyDeskProps) {
         onBorrowed={clear}
         returnFocusTo={inputRef}
       />
+      <LendHeldCopyDialog
+        target={lending.held}
+        open={lending.open}
+        onOpenChange={(open) => setLending((current) => ({ ...current, open }))}
+        onBorrowed={clear}
+        returnFocusTo={inputRef}
+      />
     </section>
   )
 }
@@ -177,14 +231,30 @@ type CopyResultProps = {
   /** A new lookup of the same code is on its way. */
   busy: boolean
   onDone: () => void
+  onReturned: (result: ReturnResult) => void
   onBorrow: () => void
+  /** Lends a held copy to the member it is set aside for. */
+  onLend: (held: HeldCopy) => void
   borrowLoading: boolean
   borrowError: Error | null
 }
 
-/** The copy behind the code: its loan with Return, or Borrow when it is on the shelf. */
-function CopyResult({ found, busy, onDone, onBorrow, borrowLoading, borrowError }: CopyResultProps) {
+/**
+ * The copy behind the code: its loan with Return, who it is held for with
+ * Borrow for that member, or Borrow when it is on the shelf.
+ */
+function CopyResult({
+  found,
+  busy,
+  onDone,
+  onReturned,
+  onBorrow,
+  onLend,
+  borrowLoading,
+  borrowError,
+}: CopyResultProps) {
   const loan = found.active_loan
+  const heldFor = found.held_for
   return (
     <Card
       role="group"
@@ -202,7 +272,42 @@ function CopyResult({ found, busy, onDone, onBorrow, borrowLoading, borrowError 
           <p className="truncate text-sm text-muted-foreground">by {found.book.author}</p>
         </div>
         {loan ? (
-          <LoanReturn loan={loan} onDone={onDone} />
+          <LoanReturn loan={loan} onDone={onDone} onReturned={onReturned} />
+        ) : found.status === "held" && heldFor ? (
+          <>
+            <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+              <div className="space-y-1">
+                <dt className="text-xs font-medium text-muted-foreground">Held for</dt>
+                <dd>
+                  <MemberLink member={heldFor.member} className="font-medium" />
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="text-xs font-medium text-muted-foreground">Pick up by</dt>
+                <dd>{formatPickupDate(heldFor.pickup_by)}</dd>
+              </div>
+            </dl>
+            <p className="text-sm text-muted-foreground">
+              This copy is set aside for a hold. Only {heldFor.member.full_name} can borrow it until
+              then.
+            </p>
+            <DeskActions onDone={onDone}>
+              <Button
+                aria-label={`Borrow ${found.copy.code} to ${heldFor.member.full_name}`}
+                onClick={() =>
+                  onLend({
+                    book: found.book,
+                    copy: found.copy,
+                    member: heldFor.member,
+                    pickup_by: heldFor.pickup_by,
+                  })
+                }
+              >
+                <HandHelping aria-hidden />
+                Borrow
+              </Button>
+            </DeskActions>
+          </>
         ) : found.archived ? (
           <>
             <p className="text-sm text-muted-foreground">
@@ -229,19 +334,23 @@ function CopyResult({ found, busy, onDone, onBorrow, borrowLoading, borrowError 
   )
 }
 
+type LoanReturnProps = {
+  loan: LoanOut
+  onDone: () => void
+  onReturned: (result: ReturnResult) => void
+}
+
 /** The loan on a scanned copy. Seeing it and pressing Return copy is the confirmation. */
-function LoanReturn({ loan, onDone }: { loan: LoanOut; onDone: () => void }) {
+function LoanReturn({ loan, onDone, onReturned }: LoanReturnProps) {
   const returnLoan = useReturnLoan(loan.book.id)
   const [failure, setFailure] = useState<string | null>(null)
 
   async function confirm() {
     setFailure(null)
     try {
-      const returned = await returnLoan.mutateAsync(loan.id)
-      toast.success(
-        `Returned ${returned.book.title} (${returned.copy.code}) from ${returned.member.full_name}`,
-      )
-      onDone()
+      const result = await returnLoan.mutateAsync(loan.id)
+      toast.success(returnedMessage(result))
+      onReturned(result)
     } catch (error) {
       setFailure(
         error instanceof ApiError && error.code === "loan_already_returned"

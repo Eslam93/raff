@@ -8,7 +8,7 @@ import { addDays, todayDateValue } from "@/lib/dates"
 import { formatDueDate } from "@/lib/format"
 import type { LoanOut } from "@/lib/types"
 import { errorResponse, requestsTo, stubApi } from "@/test/api-stub"
-import { availableCopy, bookDetail, borrowedCopy, member, page } from "@/test/fixtures"
+import { availableCopy, bookDetail, borrowedCopy, heldCopy, member, page } from "@/test/fixtures"
 import { jsonResponse, renderWithProviders } from "@/test/render"
 
 const members = [
@@ -33,6 +33,8 @@ function loanFor(body: { copy_id: string; member_id: string; due_date: string })
     returned_at: null,
     is_overdue: false,
     days_overdue: 0,
+    renewals: 0,
+    can_renew: true,
   }
 }
 
@@ -130,6 +132,49 @@ describe("BorrowDialog", () => {
     )
     expect(screen.getByRole("combobox", { name: "Copy" })).toHaveValue("copy-2")
     expect(requestsTo(fetchMock, "GET /api/books/book-1")).toHaveLength(1)
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it("never offers a copy set aside for a member's hold", () => {
+    stubApi({ "GET /api/members": membersRoute })
+    const book = bookDetail({
+      copies: [heldCopy("copy-1", "CP-0001"), availableCopy("copy-2", "CP-0002")],
+    })
+    renderWithProviders(<BorrowDialog book={book} copyId={null} open onOpenChange={vi.fn()} />)
+
+    const copySelect = screen.getByRole("combobox", { name: "Copy" })
+    expect(within(copySelect).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "CP-0002",
+    ])
+    expect(copySelect).toHaveValue("copy-2")
+  })
+
+  it("explains a copy a return just set aside for a hold and moves to a copy still available", async () => {
+    const refreshed = bookDetail({
+      copies: [
+        borrowedCopy("copy-1", "CP-0001"),
+        availableCopy("copy-2", "CP-0002"),
+        heldCopy("copy-3", "CP-0003"),
+      ],
+    })
+    stubApi({
+      "GET /api/members": membersRoute,
+      "POST /api/loans": () =>
+        errorResponse(409, "copy_held", "Copy CP-0003 is held for Maya Hassan until 19 Oct."),
+      "GET /api/books/book-1": () => refreshed,
+    })
+    const onOpenChange = vi.fn()
+    renderWithProviders(
+      <BorrowDialog book={bookDetail()} copyId="copy-3" open onOpenChange={onOpenChange} />,
+    )
+
+    const user = await chooseOmarWithTheKeyboard()
+    await user.click(screen.getByRole("button", { name: "Borrow" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Copy CP-0003 is held for Maya Hassan until 19 Oct. Another available copy is now selected: confirm to borrow it.",
+    )
+    expect(screen.getByRole("combobox", { name: "Copy" })).toHaveValue("copy-2")
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 })

@@ -17,6 +17,14 @@ const onLoan = loan({
   days_overdue: 3,
 })
 
+/**
+ * The page also lists the copies waiting for pick-up, so that request always
+ * gets an answer: none waiting, unless a test gives its own.
+ */
+function stubDeskApi(routes: Parameters<typeof stubApi>[0]) {
+  return stubApi({ "GET /api/holds": () => page([]), ...routes })
+}
+
 function renderCirculation(route = "/circulation") {
   return renderWithProviders(
     <Routes>
@@ -36,7 +44,7 @@ function currentLocation() {
 
 describe("CirculationPage: the copy-code box", () => {
   it("is ready for a scan, reads cp-12 as CP-0012, and returns the copy on loan", async () => {
-    const fetchMock = stubApi({
+    const fetchMock = stubDeskApi({
       "GET /api/loans": () => page([]),
       "GET /api/copies/by-code/CP-0012": () => copyLookup({ active_loan: onLoan }),
       "POST /api/loans/loan-7/return": () => ({ ...onLoan, returned_at: "2026-09-19T10:00:00Z" }),
@@ -70,7 +78,7 @@ describe("CirculationPage: the copy-code box", () => {
   })
 
   it("offers Borrow for an available copy and opens the borrow dialog with that copy chosen", async () => {
-    const fetchMock = stubApi({
+    const fetchMock = stubDeskApi({
       "GET /api/loans": () => page([]),
       "GET /api/copies/by-code/CP-0003": () =>
         copyLookup({ copy: { id: "copy-3", code: "CP-0003" } }),
@@ -94,7 +102,7 @@ describe("CirculationPage: the copy-code box", () => {
   })
 
   it("says so when no copy has the code", async () => {
-    stubApi({
+    stubDeskApi({
       "GET /api/loans": () => page([]),
       "GET /api/copies/by-code/CP-0099": () =>
         errorResponse(404, "not_found", "The copy was not found."),
@@ -109,7 +117,7 @@ describe("CirculationPage: the copy-code box", () => {
   })
 
   it("explains text that is not a copy code without asking the API", async () => {
-    const fetchMock = stubApi({ "GET /api/loans": () => page([]) })
+    const fetchMock = stubDeskApi({ "GET /api/loans": () => page([]) })
     const user = userEvent.setup()
     renderCirculation()
 
@@ -123,7 +131,7 @@ describe("CirculationPage: the copy-code box", () => {
 
 describe("CirculationPage: the loans list", () => {
   it("asks for the status of the chosen tab and keeps it in the URL", async () => {
-    const fetchMock = stubApi({ "GET /api/loans": () => page([onLoan]) })
+    const fetchMock = stubDeskApi({ "GET /api/loans": () => page([onLoan]) })
     const user = userEvent.setup()
     renderCirculation()
 
@@ -147,7 +155,7 @@ describe("CirculationPage: the loans list", () => {
   })
 
   it("opens on the tab and search in the URL, and searches by book, member or copy code", async () => {
-    const fetchMock = stubApi({
+    const fetchMock = stubDeskApi({
       "GET /api/loans": ({ search }) => (search.get("q") === "zzz" ? page([]) : page([onLoan])),
     })
     const user = userEvent.setup()
@@ -167,7 +175,7 @@ describe("CirculationPage: the loans list", () => {
   })
 
   it("returns a loan from its row and puts focus back in the copy-code box", async () => {
-    const fetchMock = stubApi({
+    const fetchMock = stubDeskApi({
       "GET /api/loans": () => page([onLoan]),
       "POST /api/loans/loan-7/return": () => ({ ...onLoan, returned_at: "2026-09-19T10:00:00Z" }),
     })
@@ -186,7 +194,7 @@ describe("CirculationPage: the loans list", () => {
 
 describe("CirculationPage: borrow by book", () => {
   it("finds a book in the catalog and opens the borrow dialog for it", async () => {
-    const fetchMock = stubApi({
+    const fetchMock = stubDeskApi({
       "GET /api/loans": () => page([]),
       "GET /api/books": () =>
         page([

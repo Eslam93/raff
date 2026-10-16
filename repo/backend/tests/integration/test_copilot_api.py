@@ -222,6 +222,7 @@ async def test_the_staff_face_has_staff_tools_and_sees_borrowers(
         "search_members",
         "get_member_loans",
         "get_book_loans",
+        "book_holds",
         "get_overdue_loans",
         "lookup_copy",
         "prepare_borrow",

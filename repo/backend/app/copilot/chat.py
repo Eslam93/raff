@@ -106,6 +106,7 @@ class ChatTurn:
                 user=self.user,
                 conversation_id=conversation_id,
                 loan_period_days=self.settings.loan_period_days,
+                max_renewals=self.settings.max_renewals,
             ),
             history=history,
             user_text=self.text,

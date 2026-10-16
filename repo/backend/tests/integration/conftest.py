@@ -122,6 +122,8 @@ async def empty_db(db_session: AsyncSession) -> AsyncSession:
         "activity_events",
         "sessions",
         "users",
+        "renewals",
+        "holds",
         "loans",
         "copies",
         "books",

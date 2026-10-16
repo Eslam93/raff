@@ -10,6 +10,7 @@ from app.api.routers import (
     copilot,
     dashboard,
     health,
+    holds,
     isbn,
     loans,
     me,
@@ -26,5 +27,6 @@ api_router.include_router(isbn.router)
 api_router.include_router(copies.router)
 api_router.include_router(members.router)
 api_router.include_router(loans.router)
+api_router.include_router(holds.router)
 api_router.include_router(activity.router)
 api_router.include_router(copilot.router)

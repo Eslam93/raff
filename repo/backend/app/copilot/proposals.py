@@ -24,6 +24,7 @@ from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.copilot import conversations
+from app.core.config import DEFAULT_HOLD_PICKUP_DAYS, DEFAULT_MAX_RENEWALS
 from app.core.exceptions import (
     AppError,
     ConflictError,
@@ -60,13 +61,15 @@ async def prepare_borrow(
     loan_period_days: int,
 ) -> ProposalOut:
     """Checks a borrow as circulation.borrow will, and stores it as a pending proposal with its
-    concrete due date. With a book, its first available copy by code is chosen. The errors are
-    the borrow's own, a refused due date named by its rule, and no_copy_available.
+    concrete due date. With a book, the copy chosen is the one set aside for the member's hold,
+    or else the book's first available copy by code, as the web app's borrow of a book chooses.
+    The errors are the borrow's own (copy_held among them), a refused due date named by its
+    rule, and no_copy_available.
     """
     _require_staff(user)
     try:
         if book_id is not None:
-            copy_id = await circulation.first_available_copy(session, book_id)
+            copy_id = await circulation.first_available_copy(session, book_id, member_id=member_id)
         elif copy_code is not None:
             copy_id = (await circulation.find_copy_by_code(session, copy_code)).copy_ref.id
         else:
@@ -222,11 +225,22 @@ def _status(proposal: CopilotProposal, lapsed: bool) -> str:
     return "expired" if proposal.status == "pending" and lapsed else proposal.status
 
 
-async def get(session: AsyncSession, proposal_id: uuid.UUID, *, user_id: uuid.UUID) -> ProposalOut:
+async def get(
+    session: AsyncSession,
+    proposal_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID,
+    max_renewals: int = DEFAULT_MAX_RENEWALS,
+) -> ProposalOut:
+    """max_renewals decides whether the proposal's loan, once made, can be renewed."""
     proposal, lapsed = await _find(session, proposal_id, user_id=user_id)
     result = proposal.result or {}
     loan_id = result.get("loan_id")
-    loan = await circulation.get_loan(session, uuid.UUID(loan_id)) if loan_id else None
+    loan = (
+        await circulation.get_loan(session, uuid.UUID(loan_id), max_renewals=max_renewals)
+        if loan_id
+        else None
+    )
     return ProposalOut.model_validate(
         {
             **proposal.summary,
@@ -246,12 +260,19 @@ async def get(session: AsyncSession, proposal_id: uuid.UUID, *, user_id: uuid.UU
 
 
 async def confirm(
-    session: AsyncSession, proposal_id: uuid.UUID, *, user: User, loan_period_days: int
+    session: AsyncSession,
+    proposal_id: uuid.UUID,
+    *,
+    user: User,
+    loan_period_days: int,
+    hold_pickup_days: int = DEFAULT_HOLD_PICKUP_DAYS,
+    max_renewals: int = DEFAULT_MAX_RENEWALS,
 ) -> ProposalOut:
     """Makes the proposed change as the user, via the Copilot, and returns the proposal with
     its loan. proposal_resolved when it is no longer pending, proposal_expired past its expiry.
     A refused change marks the proposal failed and raises the service's conflict, or
-    proposal_failed with the service's message.
+    proposal_failed with the service's message. The change settles the book's holds as the
+    web app's own borrow and return do, with hold_pickup_days for a copy set aside.
     """
     # A rollback expires every loaded object, so the user's id is read before anything runs.
     user_id = user.id
@@ -263,7 +284,14 @@ async def confirm(
     await _tell_conversation(session, proposal, _confirmed_note(proposal))
     try:
         # The service commits, and with it the status change and the note.
-        loan = await _make_change(session, proposal, user=user, loan_period_days=loan_period_days)
+        loan = await _make_change(
+            session,
+            proposal,
+            user=user,
+            loan_period_days=loan_period_days,
+            hold_pickup_days=hold_pickup_days,
+            max_renewals=max_renewals,
+        )
     except AppError as exc:
         await session.rollback()
         raise await _fail(session, proposal_id, user_id=user_id, error=exc) from exc
@@ -271,7 +299,7 @@ async def confirm(
     # The service makes the loan's id, so it is stored with a second commit.
     proposal.result = {"loan_id": str(loan.id)}
     await session.commit()
-    return await get(session, proposal_id, user_id=user_id)
+    return await get(session, proposal_id, user_id=user_id, max_renewals=max_renewals)
 
 
 async def cancel(session: AsyncSession, proposal_id: uuid.UUID, *, user: User) -> None:
@@ -314,7 +342,13 @@ async def _ensure_pending(session: AsyncSession, proposal: CopilotProposal, laps
 
 
 async def _make_change(
-    session: AsyncSession, proposal: CopilotProposal, *, user: User, loan_period_days: int
+    session: AsyncSession,
+    proposal: CopilotProposal,
+    *,
+    user: User,
+    loan_period_days: int,
+    hold_pickup_days: int,
+    max_renewals: int,
 ) -> LoanOut:
     params = proposal.params
     if proposal.action == "borrow":
@@ -324,11 +358,18 @@ async def _make_change(
             member_id=uuid.UUID(params["member_id"]),
             due_date=date.fromisoformat(params["due_date"]),
             loan_period_days=loan_period_days,
+            hold_pickup_days=hold_pickup_days,
+            max_renewals=max_renewals,
             via="copilot",
             actor=user,
         )
     return await circulation.return_loan(
-        session, uuid.UUID(params["loan_id"]), via="copilot", actor=user
+        session,
+        uuid.UUID(params["loan_id"]),
+        hold_pickup_days=hold_pickup_days,
+        max_renewals=max_renewals,
+        via="copilot",
+        actor=user,
     )
 
 

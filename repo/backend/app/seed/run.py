@@ -82,14 +82,16 @@ def _has_library_data() -> ColumnElement[bool]:
 
 
 async def _reset_library(session: AsyncSession) -> uuid.UUID | None:
-    """Deletes the activity, loans, copies, books and every member nobody signs in as, and
-    restarts the copy codes at CP-0001. Users and their sessions stay.
+    """Deletes the activity, holds, loans and their renewals, copies, books and every member
+    nobody signs in as, and restarts the copy codes at CP-0001. Users and their sessions stay.
 
     Returns the member record the demo member account signs in as. Its address is cleared so the
     new demo member can take it; once the account has moved over, the old record is deleted. When
     the new demo member has the same id, storing it overwrites the record instead.
     """
-    await session.execute(text("TRUNCATE activity_events, loans, copies, books RESTART IDENTITY"))
+    await session.execute(
+        text("TRUNCATE activity_events, renewals, holds, loans, copies, books RESTART IDENTITY")
+    )
     signed_in = select(User.member_id).where(User.member_id.is_not(None))
     await session.execute(delete(Member).where(Member.id.not_in(signed_in)))
     await session.execute(text("ALTER SEQUENCE copy_code_seq RESTART WITH 1"))

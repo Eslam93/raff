@@ -15,12 +15,14 @@ from app.schemas.fields import (
     Isbn,
     PublishedYear,
 )
+from app.schemas.holds import HoldOut
+from app.schemas.loans import CopyStatus, HeldFor
 from app.schemas.members import MemberRef
 
 MAX_COPIES_PER_REQUEST = 20
 
+# all_borrowed: the book has copies and none is on the shelf (each is lent out or held).
 Availability = Literal["available", "all_borrowed", "no_copies"]
-CopyStatus = Literal["available", "borrowed"]
 # The catalog's orders: title and author A to Z, the newest publication year first, or the book
 # added to the catalog most recently first.
 BookSort = Literal["title", "author", "year_desc", "recent"]
@@ -77,6 +79,8 @@ class CopyOut(BaseModel):
     due_at: datetime | None
     # Who has the copy. Staff only: null for members, always.
     active_loan: LoanBrief | None
+    # Who a held copy is set aside for, and until when. Staff only: null for members, always.
+    held_for: HeldFor | None
 
 
 class BookSummary(BaseModel):
@@ -98,6 +102,11 @@ class BookDetail(BookSummary):
     created_at: datetime
     updated_at: datetime
     copies: list[CopyOut]
+    # Members in line for the book: its waiting holds.
+    holds_waiting: int
+    # The signed-in member's open hold on the book, or null. Null for an account without a
+    # member record, such as staff.
+    my_hold: HoldOut | None
 
 
 class IsbnLookupOut(BaseModel):

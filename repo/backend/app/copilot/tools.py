@@ -4,19 +4,21 @@ and for staff, preparing a borrow or a return that only the user's confirm makes
 Each tool's parameters are a pydantic model that rejects unknown fields, so the model can add
 neither an identity nor a filter the tool does not offer. Who is asking always comes from the
 session (ToolContext.user), and the services apply the web app's own rules: a member sees when a
-borrowed copy is due back, never who has it, and only their own loans.
+borrowed copy is due back, never who has it, that a copy is set aside for a hold, never for whom,
+and only their own loans and holds.
 
 A tool returns what the model reads (plain JSON, with dates and no times) and what the panel
 shows (a display in the product's API shapes), and can put its data in plain sentences for the
 fallback reply. Dates for the model are written like "3 Oct 2026": the prompts hold no digits,
-so the data is what shows the model the form to answer in.
+so the data is what shows the model the form to answer in. The holds lookups have no display:
+the panel has no card for a hold yet, so the reply says what the answer needs.
 """
 
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,13 +38,15 @@ from app.schemas.copilot import (
     ProposalDisplay,
     ProposalOut,
 )
+from app.schemas.holds import HoldOut
 from app.schemas.loans import CopyLookup, LoanOut, LoanStatus
 from app.schemas.members import MemberOut
-from app.services import activity, catalog, circulation, members
+from app.services import activity, catalog, circulation, holds, members
 
 MAX_SEARCH_RESULTS = 10
 MAX_MEMBER_RESULTS = 10
 MAX_LOANS = 20
+MAX_HOLDS = 20
 MAX_COPY_CODE_LENGTH = 20
 # Book descriptions are cut to this length for the model.
 MAX_DESCRIPTION_CHARS = 600
@@ -62,6 +66,8 @@ class ToolContext:
     conversation_id: uuid.UUID | None
     # The loan period from the settings, for a borrow without a due date.
     loan_period_days: int
+    # The renewal limit from the settings, which decides whether a loan can be renewed.
+    max_renewals: int
 
 
 @dataclass(frozen=True)
@@ -148,6 +154,67 @@ def _copies_text(available: int, total: int) -> str:
     return f"{available} of {total} {'copy' if total == 1 else 'copies'} available"
 
 
+# Holds, as every lookup that mentions one gives it. What a hold says depends on its status: its
+# place in line while waiting, the copy set aside and the day to pick it up by while ready, and
+# the day it closed once fulfilled, cancelled or expired.
+
+# How a closed hold ended, in words.
+_HOLD_ENDINGS = {"fulfilled": "picked up", "cancelled": "cancelled", "expired": "expired"}
+
+
+def _hold_state(hold: HoldOut) -> Data:
+    data: Data = {"status": hold.status, "placed_on": _day(hold.placed_at)}
+    if hold.position is not None:
+        data["place_in_line"] = hold.position
+    if hold.copy_ref is not None:
+        data["copy_code"] = hold.copy_ref.code
+    if hold.status == "ready":
+        data["pick_up_by"] = _day(hold.pickup_by)
+    elif hold.status in _HOLD_ENDINGS:
+        # A ready hold past its pick-up time reads as expired before anything writes closed_at.
+        data["closed_on"] = _day(hold.closed_at or hold.pickup_by)
+    return data
+
+
+def _hold_data(hold: HoldOut) -> Data:
+    return {
+        "book_id": str(hold.book.id),
+        "title": hold.book.title,
+        "author": hold.book.author,
+        **_hold_state(hold),
+    }
+
+
+def _availability_holds(holds_waiting: int, my_hold: HoldOut | None, *, is_member: bool) -> Data:
+    """The holds part of a book's availability: how many members are in line for it, and for an
+    account with a member record, its own open hold on the book (null when it has none).
+    """
+    data: Data = {"holds_waiting": holds_waiting}
+    if is_member:
+        data["my_hold"] = _hold_state(my_hold) if my_hold is not None else None
+    return data
+
+
+def _hold_text(hold: Data, *, yours: bool) -> str:
+    status = hold["status"]
+    if status == "ready":
+        for_whom = " for you" if yours else ""
+        return f"copy {hold['copy_code']} is set aside{for_whom} until {hold['pick_up_by']}"
+    if status == "waiting":
+        return ("you are " if yours else "") + f"number {hold['place_in_line']} in line"
+    return f"{_HOLD_ENDINGS[status]} on {hold['closed_on']}"
+
+
+def _availability_text(book: Data) -> str:
+    """How many copies are available, then the line and the member's own hold, if any."""
+    text = _copies_text(book["copies_available"], book["copies_total"])
+    if book["holds_waiting"]:
+        text += f", {_count(book['holds_waiting'], 'member')} waiting"
+    if book.get("my_hold") is not None:
+        text += f", {_hold_text(book['my_hold'], yours=True)}"
+    return text
+
+
 # search_catalog
 
 
@@ -184,15 +251,28 @@ def _book_brief(book: BookSummary) -> Data:
 
 
 async def _search_catalog(context: ToolContext, params: SearchCatalog) -> ToolOutput:
+    session, member_id = context.session, context.user.member_id
     page = await catalog.list_books(
-        context.session,
+        session,
         q=params.query,
         category=params.category,
         available_only=params.available_only,
         limit=params.limit,
         offset=0,
     )
-    data = {"matches": page.total, "books": [_book_brief(book) for book in page.items]}
+    books = []
+    for book in page.items:
+        my_hold = None
+        if member_id is not None:
+            my_hold = await holds.open_hold(session, book_id=book.id, member_id=member_id)
+        waiting = await holds.waiting_count(session, book.id)
+        books.append(
+            {
+                **_book_brief(book),
+                **_availability_holds(waiting, my_hold, is_member=member_id is not None),
+            }
+        )
+    data = {"matches": page.total, "books": books}
     return ToolOutput(data, BooksDisplay(items=page.items) if page.items else None)
 
 
@@ -200,8 +280,7 @@ def _render_books(data: Data) -> str:
     if not data["books"]:
         return "No books in the catalog match that."
     lines = [
-        f"- {book['title']} by {book['author']}: "
-        + _copies_text(book["copies_available"], book["copies_total"])
+        f"- {book['title']} by {book['author']}: {_availability_text(book)}"
         for book in data["books"]
     ]
     return "\n".join(["Books in the catalog:", *lines])
@@ -237,19 +316,24 @@ def _copy_data(copy: CopyOut) -> Data:
     data: Data = {"code": copy.code, "status": copy.status}
     if copy.due_at is not None:
         data["due_back"] = _day(copy.due_at)
-    # Only staff get the active loan; for members it is always empty.
+    # Only staff get the active loan, and who a held copy is set aside for; for members both are
+    # always empty.
     if copy.active_loan is not None:
         data["borrower"] = copy.active_loan.member.full_name
         data["overdue"] = copy.active_loan.is_overdue
+    if copy.held_for is not None:
+        data["held_for"] = copy.held_for.member.full_name
+        data["pick_up_by"] = _day(copy.held_for.pickup_by)
     return data
 
 
-def _book_data(book: BookDetail) -> Data:
+def _book_data(book: BookDetail, *, is_member: bool) -> Data:
     description = book.description
     if description is not None and len(description) > MAX_DESCRIPTION_CHARS:
         description = description[:MAX_DESCRIPTION_CHARS].rstrip() + "..."
     data: Data = {
         **_book_brief(book),
+        **_availability_holds(book.holds_waiting, book.my_hold, is_member=is_member),
         "isbn": book.isbn,
         "description": description,
         "copies": [_copy_data(copy) for copy in book.copies],
@@ -260,19 +344,29 @@ def _book_data(book: BookDetail) -> Data:
 
 
 async def _get_book(context: ToolContext, params: GetBook) -> ToolOutput:
+    # As the book's page: staff see who has a copy or who it is held for, and an account with a
+    # member record gets its own hold on the book.
+    member_id = context.user.member_id
     book = await catalog.get_book_detail(
-        context.session, params.book_id, show_borrowers=context.user.is_staff
+        context.session, params.book_id, show_borrowers=context.user.is_staff, member_id=member_id
     )
-    return ToolOutput(_book_data(book), BookDisplay(book=book))
+    return ToolOutput(_book_data(book, is_member=member_id is not None), BookDisplay(book=book))
 
 
 def _render_book(data: Data) -> str:
-    lines = [
-        f"{data['title']} by {data['author']}: "
-        + _copies_text(data["copies_available"], data["copies_total"])
-        + "."
-    ]
+    lines = [f"{data['title']} by {data['author']}: {_availability_text(data)}."]
+    my_hold = data.get("my_hold")
     for copy in data["copies"]:
+        if copy["status"] == "held":
+            if "held_for" in copy:
+                lines.append(
+                    f"- Copy {copy['code']} is set aside for {copy['held_for']} until "
+                    f"{copy['pick_up_by']}."
+                )
+            # A copy set aside for the member asking is already in the first line.
+            elif my_hold is None or my_hold.get("copy_code") != copy["code"]:
+                lines.append(f"- Copy {copy['code']} is set aside for a member's hold.")
+            continue
         if copy["status"] != "borrowed":
             continue
         line = f"- Copy {copy['code']} is due back on {copy['due_back']}"
@@ -317,7 +411,12 @@ async def _get_my_loans(context: ToolContext, params: GetMyLoans) -> ToolOutput:
     if member_id is None:
         raise NotFoundError("This account has no member record, so it has no loans.")
     page = await circulation.list_loans(
-        context.session, status=params.status, member_id=member_id, limit=MAX_LOANS, offset=0
+        context.session,
+        status=params.status,
+        member_id=member_id,
+        limit=MAX_LOANS,
+        offset=0,
+        max_renewals=context.max_renewals,
     )
     data = {
         "today": _today(),
@@ -343,6 +442,54 @@ def _render_loans(data: Data) -> str:
         for loan in loans
     ]
     return "\n".join(["Your loans:", *lines])
+
+
+# my_holds
+
+# What a holds lookup can list: open holds (waiting, or with a copy set aside) or closed ones.
+HoldsShown = Literal["open", "closed"]
+
+
+class MyHolds(ToolParams):
+    status: HoldsShown = Field(
+        default="open",
+        description="open: holds still in line or with a copy set aside, those with a copy set "
+        "aside first. closed: past holds, picked up, cancelled or expired, the most recently "
+        "closed first.",
+    )
+
+
+async def _my_holds(context: ToolContext, params: MyHolds) -> ToolOutput:
+    # Always the signed-in member: the parameters have no member id to change it.
+    member_id = context.user.member_id
+    if member_id is None:
+        raise NotFoundError(
+            "This account has no member record, so it has no holds.", code="no_member_profile"
+        )
+    page = await holds.list_holds(
+        context.session, status=params.status, member_id=member_id, limit=MAX_HOLDS, offset=0
+    )
+    data = {
+        "today": _today(),
+        "status": params.status,
+        "total": page.total,
+        "holds": [_hold_data(hold) for hold in page.items],
+    }
+    return ToolOutput(data)
+
+
+def _render_my_holds(data: Data) -> str:
+    held = data["holds"]
+    if data["status"] == "closed":
+        if not held:
+            return "You have no past holds."
+        heading = "Your past holds:"
+    else:
+        if not held:
+            return "You have no open holds."
+        heading = "Your holds:"
+    lines = [f"- {hold['title']}: {_hold_text(hold, yours=True)}" for hold in held]
+    return "\n".join([heading, *lines])
 
 
 # Staff lookups. A loan as staff see it also says who has it.
@@ -420,7 +567,12 @@ class GetMemberLoans(ToolParams):
 async def _get_member_loans(context: ToolContext, params: GetMemberLoans) -> ToolOutput:
     member = await members.get_member(context.session, params.member_id)
     page = await circulation.list_loans(
-        context.session, status=params.status, member_id=member.id, limit=MAX_LOANS, offset=0
+        context.session,
+        status=params.status,
+        member_id=member.id,
+        limit=MAX_LOANS,
+        offset=0,
+        max_renewals=context.max_renewals,
     )
     data = {
         "today": _today(),
@@ -460,7 +612,12 @@ class GetBookLoans(ToolParams):
 async def _get_book_loans(context: ToolContext, params: GetBookLoans) -> ToolOutput:
     book = await catalog.get_book_detail(context.session, params.book_id)
     page = await circulation.list_loans(
-        context.session, status=params.status, book_id=book.id, limit=MAX_LOANS, offset=0
+        context.session,
+        status=params.status,
+        book_id=book.id,
+        limit=MAX_LOANS,
+        offset=0,
+        max_renewals=context.max_renewals,
     )
     data = {
         "today": _today(),
@@ -485,6 +642,52 @@ def _render_book_loans(data: Data) -> str:
     return "\n".join([heading, *(_staff_loan_line(loan, with_title=False) for loan in loans)])
 
 
+# book_holds
+
+
+class BookHolds(ToolParams):
+    book_id: uuid.UUID = Field(description="The id of a book from search results.")
+    status: HoldsShown = Field(
+        default="open",
+        description="open: who has a copy set aside, the soonest pick-up first, then who is "
+        "waiting, in line order. closed: past holds, picked up, cancelled or expired, the most "
+        "recently closed first.",
+    )
+
+
+async def _book_holds(context: ToolContext, params: BookHolds) -> ToolOutput:
+    book = await catalog.get_book_detail(context.session, params.book_id)
+    page = await holds.list_holds(
+        context.session, status=params.status, book_id=book.id, limit=MAX_HOLDS, offset=0
+    )
+    data = {
+        "today": _today(),
+        "title": book.title,
+        "holds_waiting": book.holds_waiting,
+        "status": params.status,
+        "total": page.total,
+        "holds": [
+            {**_hold_data(hold), "member": hold.member.full_name, "member_id": str(hold.member.id)}
+            for hold in page.items
+        ],
+    }
+    return ToolOutput(data)
+
+
+def _render_book_holds(data: Data) -> str:
+    title, held = data["title"], data["holds"]
+    if data["status"] == "closed":
+        if not held:
+            return f"{title} has no past holds."
+        heading = f"Past holds on {title}:"
+    else:
+        if not held:
+            return f"Nobody is waiting for {title}."
+        heading = f"Holds on {title}:"
+    lines = [f"- {hold['member']}: {_hold_text(hold, yours=False)}" for hold in held]
+    return "\n".join([heading, *lines])
+
+
 # get_overdue_loans
 
 
@@ -495,7 +698,11 @@ class GetOverdueLoans(ToolParams):
 async def _get_overdue_loans(context: ToolContext, params: GetOverdueLoans) -> ToolOutput:
     # Due soonest first is longest overdue first.
     page = await circulation.list_loans(
-        context.session, status="overdue", limit=params.limit, offset=0
+        context.session,
+        status="overdue",
+        limit=params.limit,
+        offset=0,
+        max_renewals=context.max_renewals,
     )
     data = {
         "today": _today(),
@@ -540,11 +747,18 @@ def _copy_lookup_data(lookup: CopyLookup) -> Data:
         data["overdue"] = loan.is_overdue
         if loan.is_overdue:
             data["days_overdue"] = loan.days_overdue
+    held = lookup.held_for
+    if held is not None:
+        data["held_for"] = held.member.full_name
+        data["member_id"] = str(held.member.id)
+        data["pick_up_by"] = _day(held.pickup_by)
     return data
 
 
 async def _lookup_copy(context: ToolContext, params: LookupCopy) -> ToolOutput:
-    lookup = await circulation.find_copy_by_code(context.session, params.code)
+    lookup = await circulation.find_copy_by_code(
+        context.session, params.code, max_renewals=context.max_renewals
+    )
     return ToolOutput(_copy_lookup_data(lookup), CopyDisplay(lookup=lookup))
 
 
@@ -553,6 +767,8 @@ def _render_copy(data: Data) -> str:
     if "borrower" in data:
         text += f" is on loan to {data['borrower']}, due back on {data['due_on']}"
         text += ", overdue." if data["overdue"] else "."
+    elif "held_for" in data:
+        text += f" is set aside for {data['held_for']}, to pick up by {data['pick_up_by']}."
     else:
         text += " is available."
     if data["archived"]:
@@ -579,8 +795,8 @@ class PrepareBorrow(ToolParams):
     )
     book_id: uuid.UUID | None = Field(
         default=None,
-        description="The book to lend; its first available copy is chosen. Give this or "
-        "copy_code, not both.",
+        description="The book to lend; the copy set aside for the member's hold is chosen, or "
+        "else the book's first available copy. Give this or copy_code, not both.",
     )
     copy_code: str | None = Field(
         default=None,
@@ -666,7 +882,8 @@ SEARCH_CATALOG = Tool(
     name="search_catalog",
     description="Search the library's catalog by title, author, ISBN, category and "
     "availability. Returns the number of matches and the matching books, each with how many "
-    "copies the library has and how many can be borrowed now.",
+    "copies the library has, how many can be borrowed now and how many members are waiting in "
+    "line for it, and for a member, their own hold on it.",
     params=SearchCatalog,
     status="Searching the catalog",
     run=_search_catalog,
@@ -684,8 +901,10 @@ LIST_CATEGORIES = Tool(
 
 GET_BOOK_MEMBER_VIEW = Tool(
     name="get_book",
-    description="Show one book: its details, and each copy's status with the date a borrowed "
-    "copy is due back.",
+    description="Show one book: its details, each copy's status with the date a borrowed copy "
+    "is due back, how many members are waiting in line for it, and the asking member's own "
+    "hold on it: their place in line, or the copy set aside for them and the day to pick it up "
+    "by.",
     params=GetBook,
     status="Opening the book",
     run=_get_book,
@@ -694,8 +913,10 @@ GET_BOOK_MEMBER_VIEW = Tool(
 
 GET_BOOK_STAFF_VIEW = Tool(
     name="get_book",
-    description="Show one book: its details, and each copy's status. For a borrowed copy, who "
-    "has it, when it is due back and whether it is overdue.",
+    description="Show one book: its details, each copy's status, and how many members are "
+    "waiting in line for it. For a borrowed copy, who has it, when it is due back and whether "
+    "it is overdue. For a copy set aside for a hold, who it is for and the day to pick it up "
+    "by.",
     params=GetBook,
     status="Opening the book",
     run=_get_book,
@@ -710,6 +931,17 @@ GET_MY_LOANS = Tool(
     status="Checking your loans",
     run=_get_my_loans,
     render=_render_loans,
+)
+
+MY_HOLDS = Tool(
+    name="my_holds",
+    description="The holds of the member who is asking: open holds, each with its place in "
+    "line, or the copy set aside for them and the day to pick it up by; or past holds and how "
+    "each ended. Includes today's date.",
+    params=MyHolds,
+    status="Checking your holds",
+    run=_my_holds,
+    render=_render_my_holds,
 )
 
 SEARCH_MEMBERS = Tool(
@@ -742,6 +974,17 @@ GET_BOOK_LOANS = Tool(
     render=_render_book_loans,
 )
 
+BOOK_HOLDS = Tool(
+    name="book_holds",
+    description="One book's holds: who has a copy set aside and the day to pick it up by, then "
+    "who is waiting, in line order, and how many members are waiting; or its past holds and "
+    "how each ended. Includes today's date.",
+    params=BookHolds,
+    status="Checking the book's holds",
+    run=_book_holds,
+    render=_render_book_holds,
+)
+
 GET_OVERDUE_LOANS = Tool(
     name="get_overdue_loans",
     description="The overdue loans, longest overdue first, with who has each copy, and how "
@@ -755,7 +998,8 @@ GET_OVERDUE_LOANS = Tool(
 LOOKUP_COPY = Tool(
     name="lookup_copy",
     description="Look up one copy by its code: its book, whether it is on loan, and if so to "
-    "whom and until when.",
+    "whom and until when, or whether it is set aside for a member's hold, and if so for whom "
+    "and until when.",
     params=LookupCopy,
     status="Looking up the copy",
     run=_lookup_copy,
